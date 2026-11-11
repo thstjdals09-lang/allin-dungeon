@@ -1,6 +1,7 @@
 /* 규칙 엔진 점검. `node test.js` = 판정 테스트, `node test.js --sim` = 밸런스 시뮬레이션 */
 const assert = require('assert');
 const AD = require('./logic.js');
+const { ICONS } = require('./icons.js');
 
 const SUIT = { s: 0, h: 1, d: 2, c: 3 };
 const RANK = { T: 10, J: 11, Q: 12, K: 13, A: 14 };
@@ -241,6 +242,11 @@ assert.strictEqual(AD.pickEnemy(1, 'normal').bluff >= 0.1, true);
   assert.strictEqual(AD.reviewVerdict('show', 25, true), null);
   assert.strictEqual(AD.reviewVerdict('efold', 10, true), null);
 }
+// 아이콘 이름: 데이터가 쓰는 이름이 모두 icons.js 에 있어야 한다
+const iconNames = [...AD.ENEMIES.map((e) => e.icon), ...AD.ENCHANT_IDS.map((k) => AD.ENCHANTS[k].icon)];
+iconNames.forEach((n) => assert.ok(ICONS[n], '없는 아이콘: ' + n));
+['spade', 'crown', 'store', 'coffee', 'circle-help', 'skull', 'book-open', 'library', 'trophy', 'settings', 'calendar', 'gem'].forEach((n) => assert.ok(ICONS[n], '없는 아이콘: ' + n));
+
 console.log('logic 테스트 통과');
 
 if (process.argv.includes('--sim')) sim();

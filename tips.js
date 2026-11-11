@@ -6,14 +6,18 @@
   const MARGIN = 8;
   const TOUCH_MOUSE_GAP = 800; // 터치 뒤에 따라오는 가짜 마우스 이벤트 무시
   let el = null;
+  let anchor = null;
   let timer = 0;
-  let suppressClick = false;
+  let suppressUntil = 0; // 길게 누른 뒤 클릭이 안 오면 저절로 풀린다
+  const CLICK_WINDOW_MS = 700;
+  const clickSuppressed = () => Date.now() < suppressUntil;
   let lastTouch = 0;
 
   const target = (n) => (n && n.closest ? n.closest('[data-tip]') : null);
 
   function hide() {
     clearTimeout(timer);
+    anchor = null;
     if (el) { el.remove(); el = null; }
   }
 
@@ -23,6 +27,7 @@
     el.className = 'tip';
     el.setAttribute('role', 'tooltip');
     el.textContent = t.dataset.tip;
+    anchor = t;
     document.body.appendChild(el);
     const r = t.getBoundingClientRect();
     const w = el.offsetWidth;
@@ -43,24 +48,30 @@
   document.addEventListener('focusin', (e) => { const t = target(e.target); if (t && e.target.matches(':focus-visible')) show(t); });
   document.addEventListener('focusout', hide);
   window.addEventListener('scroll', hide, true);
+  // 다시 그리면서 기준 요소가 사라지면 mouseout·blur 가 오지 않는다
+  new MutationObserver(() => { if (anchor && !anchor.isConnected) hide(); }).observe(document.body, { childList: true, subtree: true });
+  const dropStale = () => { if (anchor && !anchor.isConnected) hide(); };
+  document.addEventListener('mousedown', () => { suppressUntil = 0; dropStale(); }, true);
+  document.addEventListener('keydown', () => { suppressUntil = 0; dropStale(); }, true);
 
   document.addEventListener('touchstart', (e) => {
     lastTouch = Date.now();
-    suppressClick = false;
+    suppressUntil = 0;
     hide();
     const t = target(e.target);
-    if (t) timer = setTimeout(() => { show(t); suppressClick = true; }, HOLD_MS);
+    if (t) timer = setTimeout(() => { show(t); suppressUntil = Infinity; }, HOLD_MS);
   }, { passive: true });
   const endTouch = () => { lastTouch = Date.now(); clearTimeout(timer); };
-  document.addEventListener('touchend', endTouch);
-  document.addEventListener('touchcancel', endTouch);
+  const endHold = () => { endTouch(); if (suppressUntil === Infinity) suppressUntil = Date.now() + CLICK_WINDOW_MS; };
+  document.addEventListener('touchend', endHold);
+  document.addEventListener('touchcancel', () => { endTouch(); suppressUntil = 0; });
   document.addEventListener('touchmove', endTouch, { passive: true });
   document.addEventListener('contextmenu', (e) => { if (target(e.target) && Date.now() - lastTouch < 2000) e.preventDefault(); });
 
   // 캡처 단계: 길게 눌러 말풍선을 띄운 뒤의 클릭은 게임 동작까지 가지 않게 막는다
   document.addEventListener('click', (e) => {
-    if (suppressClick) {
-      suppressClick = false;
+    if (clickSuppressed()) {
+      suppressUntil = 0;
       e.stopPropagation();
       e.preventDefault();
       return;

@@ -37,7 +37,7 @@
     'wine': '<path d="M8 22h8"/><path d="M7 10h10"/><path d="M12 15v7"/><path d="M12 15a5 5 0 0 0 5-5c0-2-.5-4-2-8H9c-1.5 4-2 6-2 8a5 5 0 0 0 5 5Z"/>',
   };
   const icon = (name, cls = '') =>
-    `<svg class="ic${cls ? ` ${cls}` : ''}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false">${ICONS[name] || ''}</svg>`;
-  window.ICONS = ICONS;
-  window.icon = icon;
+    `<svg class="ic${cls ? ` ${cls}` : ''}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false">${ICONS[name] || ICONS['circle-help']}</svg>`;
+  if (typeof window !== 'undefined') { window.ICONS = ICONS; window.icon = icon; }
+  if (typeof module !== 'undefined') module.exports = { ICONS, icon };
 })();
