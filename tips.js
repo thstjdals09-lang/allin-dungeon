@@ -12,6 +12,8 @@
   const CLICK_WINDOW_MS = 700;
   const clickSuppressed = () => Date.now() < suppressUntil;
   let lastTouch = 0;
+  let lastClick = 0; // 누른 직후 다시 그려진 요소가 포인터 밑에 오면 mouseover 가 또 온다 — 그건 띄우지 않는다
+  const AFTER_CLICK_MS = 400;
 
   const target = (n) => (n && n.closest ? n.closest('[data-tip]') : null);
 
@@ -43,7 +45,7 @@
 
   const onMouse = (fn) => (e) => { if (Date.now() - lastTouch > TOUCH_MOUSE_GAP) fn(e); };
 
-  document.addEventListener('mouseover', onMouse((e) => { const t = target(e.target); if (t) show(t); }));
+  document.addEventListener('mouseover', onMouse((e) => { const t = target(e.target); if (t && Date.now() - lastClick > AFTER_CLICK_MS) show(t); }));
   document.addEventListener('mouseout', onMouse((e) => { if (target(e.target) && !target(e.relatedTarget)) hide(); }));
   document.addEventListener('focusin', (e) => { const t = target(e.target); if (t && e.target.matches(':focus-visible')) show(t); });
   document.addEventListener('focusout', hide);
@@ -76,6 +78,7 @@
       e.preventDefault();
       return;
     }
+    lastClick = Date.now();
     hide();
   }, true);
 })();

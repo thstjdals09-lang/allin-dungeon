@@ -169,8 +169,15 @@ assert.strictEqual(AD.pickEnemy(1, 'normal').bluff >= 0.1, true);
 
 // 보스·하이롤러 규칙
 {
-  const ruled = AD.ENEMIES.filter((e) => e.rule).map((e) => e.rule).sort();
-  assert.deepStrictEqual(ruled, Object.keys(AD.RULES).sort(), '규칙 6개가 각각 한 상대에게');
+  const ruled = [...new Set(AD.ENEMIES.filter((e) => e.rule).map((e) => e.rule))].sort();
+  assert.deepStrictEqual(ruled, Object.keys(AD.RULES).sort(), '규칙 6개가 모두 쓰인다');
+  // 보스·하이롤러는 층마다 둘 이상 — 매번 같은 상대가 나오지 않게
+  for (let f = 1; f <= AD.FLOORS; f++) for (const k of ['elite', 'boss']) assert.ok(AD.ENEMIES.filter((e) => e.floor === f && e.kind === k).length >= 2, f + '층 ' + k);
+  // 족보 레벨·키커·갈림길
+  assert.strictEqual(AD.handValue(5, { 5: 2 }), 18);
+  assert.strictEqual(AD.handValue(5, { 5: 99 }), 24, '레벨 상한');
+  assert.strictEqual(AD.kickerNote(best('9s 9h 2d 3c 5s Kd Qh'), best('9s 9h 2d 3c 5s Jd 4h')), '키커 K > J');
+  assert.strictEqual(AD.kickerNote(best('9s 9h 2d 3c 5s Kd Qh'), best('8s 8h 2d 3c 5s Kd Qh')), '', '설명이 다르면 키커 설명 없음');
   const bear = AD.ENEMIES.find((e) => e.rule === 'forceAllin');
   assert.ok([3, 6, 9].every((n) => AD.isForcedAllin(bear, n)) && ![1, 2, 4].some((n) => AD.isForcedAllin(bear, n)));
   assert.strictEqual(AD.ruleNotice(bear, 3), '이번 판 강제 올인');
@@ -333,6 +340,14 @@ assert.strictEqual(AD.foldDamage(3, ['bluffbadge']), AD.ANTE * 3 + 2, '연승 0�
 
 console.log('logic 테스트 통과');
 
+// 봇의 베팅 방침: base = 트리플 이상 올인·투페어나 높은 원페어 벳, pair = 원페어 이상 올인, allin = 무조건 올인, bet = 매 거리 벳만
+const POLICY = {
+  base: (me) => { const allin = me.cat >= 3; return { allin, bet: allin || me.cat === 2 || (me.cat === 1 && me.tb[0] >= 10) }; },
+  pair: (me) => ({ allin: me.cat >= 1, bet: me.cat >= 1 }),
+  allin: () => ({ allin: true, bet: true }),
+  bet: () => ({ allin: false, bet: true }),
+};
+
 if (process.argv.includes('--sim')) sim();
 
 // 단순한 플레이어(체인지·유물 안 씀, 거리마다 패 세기로 벳)로 상대별 잃는 스택을 잰다
@@ -365,9 +380,20 @@ function sim() {
   console.log('난이도 ' + LEVEL + ' · 수식어·연승 반영 평균 피해');
   console.log('1층 일반 ' + avg(1, 'normal').toFixed(1) + ' · 1층 보스 ' + avg(1, 'boss').toFixed(1) + ' · 2층 보스 ' + avg(2, 'boss').toFixed(1) + ' · 3층 보스 ' + avg(3, 'boss').toFixed(1) + ' · 하이롤러 ' + [1, 2, 3].map((f) => avg(f, 'elite').toFixed(1)).join('/'));
   console.log(rows.join('\n'));
+  // 전략 비교: 어느 한 방침(특히 무조건 올인)이 늘 가장 덜 잃으면 베팅 선택이 죽는다
+  console.log('전략별 평균 피해 (1층 일반 / 1층 보스 / 2층 보스 / 3층 보스)');
+  for (const policy of Object.keys(POLICY)) {
+    const cell = (floor, kind) => {
+      const es = AD.ENEMIES.filter((e) => e.floor === floor && e.kind === kind);
+      let sum = 0;
+      for (const e of es) for (let k = 0; k < 1500; k++) sum += fight({ hole: 2, armor: 0, heal: 0, bluff: 0.1, ...e }, deckFor(floor), policy).taken;
+      return (sum / (es.length * 1500)).toFixed(1).padStart(5);
+    };
+    console.log(policy.padEnd(6) + [cell(1, 'normal'), cell(1, 'boss'), cell(2, 'boss'), cell(3, 'boss')].join(' /'));
+  }
 }
 
-function fight(enemy, deck) {
+function fight(enemy, deck, policy = 'base') {
   let ehp = enemy.hp, taken = 0, hands = 0, streak = 0, draw = AD.shuffle(deck), discard = [];
   while (ehp > 0 && hands < 80) {
     if (draw.length < 5) { draw = AD.shuffle([...draw, ...discard]); discard = []; }
@@ -387,7 +413,8 @@ function fight(enemy, deck) {
     if (enemy.rule === 'rigBoard') { const rig = AD.rigCard(ehole, flop, rest.slice(0, 3)); if (rig) put(rig.index, rig.card); }
     else if (enemy.rule === 'swapRandom') put(Math.floor(Math.random() * 3), rest[0]);
     const full = [...flop, ...rest.slice(0, 2)];
-    let pot = enemy.rule === 'bigPot' ? 2 : 1, folded = 0;
+    let pot = enemy.rule === 'bigPot' ? 2 : 1, folded = 0, foldPot = 0;
+    const enemyFirst = hands % 2 === 0; // 짝수 판은 상대가 먼저 행동
     // 내 패가 원페어 이상이면 콜, 아니면 텔이 '여유'면 폴드, 그 밖엔 콜. 폴드하면 상대가 올리기 전 팟만큼 잃는다
     const respond = (me, v, before) => {
       if (me.cat === 0 && AD.tellOf(enemy, v) === 2) { folded = -1; pot = before; }
@@ -401,20 +428,21 @@ function fight(enemy, deck) {
       const board = full.slice(0, street);
       const me = AD.best([...hole, ...board]);
       const v = AD.strength(ehole, board);
-      const allin = me.cat >= 3;
-      const bet = allin || me.cat === 2 || (me.cat === 1 && me.tb[0] >= 10);
+      const { allin, bet } = POLICY[policy](me);
+      if (enemyFirst && AD.enemyAct(enemy, v, 'none') === 'bet') { pot++; respond(me, v, pot - 1); continue; }
       if (!bet) {
-        if (AD.enemyAct(enemy, v, 'none') === 'bet') { pot++; respond(me, v, pot - 1); }
+        if (!enemyFirst && AD.enemyAct(enemy, v, 'none') === 'bet') { pot++; respond(me, v, pot - 1); }
         continue;
       }
+      const before = pot;
       pot += allin ? AD.ALLIN_ADD : 1;
       const act = AD.enemyAct(enemy, v, allin ? 'allin' : 'bet');
-      if (act === 'fold') folded = 1;
+      if (act === 'fold') { folded = 1; foldPot = before + 1; } // 올인에 폴드해도 벳에 폴드한 만큼만
       else if (allin) break;
       else if (act === 'raise') { pot++; respond(me, v, pot - 1); }
     }
     if (folded < 0) { taken += AD.foldDamage(pot); streak = 0; continue; }
-    if (folded > 0) { ehp -= AD.foldDamage(pot, [], streak); streak++; continue; }
+    if (folded > 0) { ehp -= AD.foldDamage(foldPot, [], streak); streak++; continue; }
     const out = AD.resolveShowdown({ pres: AD.best([...hole, ...full]), eres: AD.best([...ehole, ...full]), hole, pot, charms: [], enemy, streak });
     ehp = Math.min(enemy.hp, ehp - out.toEnemy + out.enemyHeal);
     taken += out.toPlayer;

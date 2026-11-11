@@ -163,17 +163,21 @@
       }),
       charms: AD.randomCharms(2, S.charms, rnd).map((id) => ({ id, price: META.price(100 + Math.floor(rnd() * 4) * 10, S.level), sold: false })),
       tricks: AD.shopTricks(rnd).map((x) => ({ id: x.id, price: META.price(x.price, S.level), sold: false })),
+      // 족보 교본: 원페어~풀하우스 중 둘. 사면 그 족보 레벨 +1
+      books: AD.shuffle([1, 2, 3, 4, 5, 6], rnd).slice(0, 2).map((cat) => ({ cat, price: META.price(45 + cat * 5, S.level), sold: false })),
     };
     ui.shopPick = null;
     S.screen = 'shop';
   }
 
 
-  const SHOP_KEY = { card: 'cards', charm: 'charms', trick: 'tricks' };
+  const SHOP_KEY = { card: 'cards', charm: 'charms', trick: 'tricks', book: 'books' };
+  const handLv = (cat) => (S.handLv || {})[cat] || 0;
   function shopToggle(kind, i) {
     const item = S.shop[SHOP_KEY[kind]][i];
     if (!item || item.sold) return;
     if (kind === 'trick' && AD.trickRoom(S.tricks.length)) return toast(AD.trickRoom(S.tricks.length));
+    if (kind === 'book' && handLv(item.cat) >= AD.MAX_HAND_LV) return toast('이 족보는 이미 최고 레벨입니다');
     const p = ui.shopPick;
     ui.shopPick = p && p.kind === kind && p.i === i ? null : { kind, i };
   }
@@ -221,6 +225,7 @@
     buyCard(i) { shopToggle('card', +i); },
     buyCharm(i) { shopToggle('charm', +i); },
     buyTrick(i) { shopToggle('trick', +i); },
+    buyBook(i) { shopToggle('book', +i); },
     shopCancel() { ui.shopPick = null; },
     buy() {
       const p = ui.shopPick;
@@ -230,7 +235,10 @@
       if (S.gold < item.price) return toast('상금이 모자랍니다');
       S.gold -= item.price;
       fx({ t: 'coin' });
-      if (p.kind === 'card') S.deck = [...S.deck, item.card]; else if (p.kind === 'trick') gainTrick(item.id); else gainCharm(item.id);
+      if (p.kind === 'card') S.deck = [...S.deck, item.card];
+      else if (p.kind === 'trick') gainTrick(item.id);
+      else if (p.kind === 'book') S.handLv = { ...(S.handLv || {}), [item.cat]: handLv(item.cat) + 1 };
+      else gainCharm(item.id);
       const key = SHOP_KEY[p.kind];
       S.shop = { ...S.shop, [key]: S.shop[key].map((x, k) => (k === p.i ? { ...x, sold: true } : x)) };
       ui.shopPick = null;
@@ -308,6 +316,18 @@
       const msg = `${cardName(card)}에 ${AD.ENCHANTS[m.en].name} 강화.`;
       if (m.from === 'event') S.event = { ...S.event, done: msg };
       else advance();
+    },
+    // 결과를 글로: 폰은 공유 창, 그 밖엔 복사
+    share() {
+      const won = S.screen === 'win';
+      const what = S.daily ? `오늘의 도전 ${S.daily}` : `${META.charOf(S.char).name} · 난이도 ${S.level}`;
+      const best = S.stats.best >= 0 ? ` · 최고 족보 ${AD.HANDS[S.stats.best].name}` : '';
+      const text = `올인 던전 · ${what} · ${won ? '하우스 정복' : `지하 ${S.floor}층 탈락`}${best}\n${location.origin}${location.pathname}`;
+      const failed = () => { ui.toast = '공유할 수 없는 브라우저입니다'; render(); };
+      if (navigator.share) { navigator.share({ text }).catch(() => {}); return; }
+      if (!navigator.clipboard) return toast('복사할 수 없는 브라우저입니다');
+      navigator.clipboard.writeText(text).catch(failed);
+      toast('결과를 복사했습니다');
     },
     modal(name) { ui.modal = { type: name }; },
     close() { ui.modal = null; },
@@ -395,11 +415,14 @@
   // 고른 것의 이름·설명·값과 [구매]. 고르는 동안 제거·나가기 줄 바로 위에 붙는다.
   function shopPanel(pk) {
     const isCard = pk.kind === 'card';
+    const isBook = pk.kind === 'book';
     const item = S.shop[SHOP_KEY[pk.kind]][pk.i];
     const pool = pk.kind === 'trick' ? AD.TRICKS : AD.CHARMS;
-    const name = isCard ? cardName(item.card) : pool[item.id].name;
+    const name = isCard ? cardName(item.card) : isBook ? `${AD.HANDS[item.cat].name} 교본` : pool[item.id].name;
+    const lv = isBook ? handLv(item.cat) : 0;
     const desc = isCard
       ? `${V.cardNote(item.card)} · 넣으면 ${AD.rankLabel(item.card.r)} ${S.deck.filter((d) => d.r === item.card.r).length + 1}장`
+      : isBook ? `이 족보로 이길 때 족보 값 ${AD.handValue(item.cat, { [item.cat]: lv })} → ${AD.handValue(item.cat, { [item.cat]: lv + 1 })} (레벨 ${lv + 1}/${AD.MAX_HAND_LV})`
       : pool[item.id].desc;
     const short = item.price - S.gold;
     const buyBtn = short > 0
@@ -423,12 +446,20 @@
         <b>${V.trickToken(x.id, ' inline')}${AD.TRICKS[x.id].name}</b><span>${AD.TRICKS[x.id].desc}</span><em class="num">${x.sold ? '구매함' : `${x.price}`}</em></button>`).join('');
     const charms = sh.charms.map((x, i) => `<button class="charmcard${pk && pk.kind === 'charm' && pk.i === i ? ' chosen' : ''}" data-act="buyCharm" data-arg="${i}" aria-pressed="${!!pk && pk.kind === 'charm' && pk.i === i}"${x.sold ? ' disabled' : ''}>
         <b>${AD.CHARMS[x.id].name}</b><span>${AD.CHARMS[x.id].desc}</span><em class="num">${x.sold ? '구매함' : `${x.price}`}</em></button>`).join('');
+    const books = (sh.books || []).map((x, i) => {
+      const lv = handLv(x.cat);
+      const maxed = lv >= AD.MAX_HAND_LV;
+      const on = !!pk && pk.kind === 'book' && pk.i === i;
+      return `<button class="charmcard${on ? ' chosen' : ''}" data-act="buyBook" data-arg="${i}" aria-pressed="${on}"${x.sold || maxed ? ' disabled' : ''}>
+        <b>${AD.HANDS[x.cat].name} 교본</b><span>족보 값 ${AD.handValue(x.cat, { [x.cat]: lv })}${maxed ? ' · 최고 레벨' : ` → ${AD.handValue(x.cat, { [x.cat]: lv + 1 })}`}</span><em class="num">${x.sold ? '구매함' : `${x.price}`}</em></button>`;
+    }).join('');
     return `<main class="screen shop">
       <p class="eyebrow">상점</p>
       <h2 class="h">카드와 유물</h2>
       <h3 class="sub">카드 · 눌러서 고르기</h3><div class="offers">${cards}</div>
       ${sh.charms.length ? `<h3 class="sub">유물</h3><div class="charmrow">${charms}</div>` : ''}
       <h3 class="sub">트릭 · 쓰면 사라지는 소모품 (${S.tricks.length}/${AD.MAX_TRICKS})</h3><div class="charmrow">${tricks}</div>${full ? `<p class="note">${full}</p>` : ''}
+      ${books ? `<h3 class="sub">족보 교본 · 그 족보로 이길 때 값이 오른다</h3><div class="charmrow">${books}</div>` : ''}
       <h3 class="sub">카드 제거</h3>
       <p class="note">덱이 얇을수록 좋은 카드가 자주 들어옵니다. 제거할 때마다 값이 25씩 오릅니다.</p>
       <h3 class="sub">카드 복제</h3>
@@ -462,6 +493,7 @@
   function vEnd() {
     const won = S.screen === 'win';
     const st = S.stats;
+    const last = !won && S.battle ? `<p class="note lastline"><b>${S.battle.enemy.name}</b>에게 탈락 · ${S.battle.log[0] || ''}</p>` : '';
     return `<main class="screen end">
       <p class="eyebrow">${won ? '하우스 정복' : '탈락'}</p>
       <h1 class="logo">${won ? '올인<br>성공' : '버스트'}</h1>
@@ -470,8 +502,11 @@
         <div><dt>이긴 매치</dt><dd class="num">${st.kills}</dd></div>
         <div><dt>쇼다운 승리 / 판</dt><dd class="num">${st.won}/${st.hands}</dd></div>
         <div><dt>최고 족보</dt><dd>${st.best >= 0 ? AD.HANDS[st.best].name : '없음'}</dd></div>
+        <div><dt>남은 상금</dt><dd class="num">${S.gold}</dd></div>
+        <div><dt>덱 / 유물</dt><dd class="num">${S.deck.length}장 / ${S.charms.length}개</dd></div>
       </dl>
-      <div class="actions">${btn('다시 도전', 'start', undefined, 'primary')}${btn('처음 화면', 'again', undefined, 'ghost')}</div>
+      ${last}
+      <div class="actions">${btn('다시 도전', 'start', undefined, 'primary')}${btn('결과 공유', 'share', undefined, 'ghost')}${btn('처음 화면', 'again', undefined, 'ghost')}</div>
     </main>`;
   }
 
@@ -491,6 +526,7 @@
       codex: () => sh.codex(P),
       records: () => sh.records(P),
       settings: () => sh.settings(m),
+      coach: () => sh.coach(),
       newrun: () => META.newRunSheet(m, P, loadSave()),
     };
     const make = (S && run[m.type]) || any[m.type];
@@ -522,6 +558,8 @@
     const changed = screen !== ui.screen;
     if (changed) ui.modal = null; // 화면이 바뀌면 열려 있던 시트는 닫는다
     if (changed) setScene(screen);
+    // 첫 전투에 한 번만 안내 시트를 띄운다
+    if (changed && screen === 'battle' && !P.coached) { ui.modal = { type: 'coach' }; note({ coached: true }); saveProfile(); }
     const keep = focusKey();
     const hadModal = !!app.querySelector('.modal');
     const view = !S ? vTitle() : { map: vMap, battle: vBattle, reward: vReward, shop: vShop, rest: vRest, event: vEvent, over: vEnd, win: vEnd }[S.screen]();

@@ -144,7 +144,7 @@ window.EVENTS_MOD = function (C) {
       opts: [{
         label: '상금 25 · 이번 층 보스 알아내기', ok: () => C.S.gold >= 25 && !C.S.bossId, no: '상금이 모자라거나 이미 알고 있습니다',
         run: () => {
-          const b = AD.pickEnemy(C.S.floor, 'boss', rnd); // 층마다 보스는 한 명이라 지금 정해도 같다
+          const b = AD.pickEnemy(C.S.floor, 'boss', rnd); // 층의 보스 후보 중 한 명을 지금 정해 둔다
           C.S.gold -= 25;
           C.S.bossId = b.id;
           return `${b.name}. ${AD.RULES[b.rule].name} : ${AD.RULES[b.rule].desc}. 지도에 적어 두었다.`;

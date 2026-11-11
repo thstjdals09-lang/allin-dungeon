@@ -2,6 +2,18 @@
 <html lang="ko">
 <meta charset="utf-8">
 <title>올인 던전</title>
+<meta name="description" content="핸드 2장으로 지하 3층 하우스를 터는 헤즈업 홀덤 로그라이크. 설치 없이 폰에서 바로 합니다.">
+<meta property="og:type" content="website">
+<meta property="og:title" content="올인 던전">
+<meta property="og:description" content="핸드 2장으로 지하 3층 하우스를 터는 헤즈업 홀덤 로그라이크">
+<meta property="og:url" content="https://thstjdals09-lang.github.io/allin-dungeon/">
+<meta property="og:image" content="https://thstjdals09-lang.github.io/allin-dungeon/og.png">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="630">
+<meta name="twitter:card" content="summary_large_image">
+<link rel="icon" href="favicon.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" href="icon-192.png">
+<link rel="manifest" href="manifest.webmanifest">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="claude:viewport-fit-sides" content="cover">
 <meta name="theme-color" content="#2a1520">
@@ -265,6 +277,9 @@
   .pips i.on { background: var(--brass); }
   .mine { margin: 0; text-align: center; font-size: 14px; color: var(--muted); }
   .mine b { color: var(--chalk); font-weight: 600; }
+  .risk.warn b { color: var(--brass); }
+  .risk.dead { color: #ff8f86; font-weight: 600; }
+  .facing.calm { background: none; color: var(--muted); border: 1px solid var(--rail); }
 
   /* 전투 화면 배치: 상대는 위, 보드는 남는 공간 가운데, 손패·버튼은 엄지가 닿는 아래 */
   .battle .board { margin-block: auto; }
@@ -362,6 +377,8 @@
   .stats { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; margin: 0; }
   .stats div { border-top: 1px solid var(--rail); padding-top: 6px; }
   .stats dt { font-size: 12px; color: var(--muted); }
+  .lastline { text-align: center; }
+  .credits { font-size: 12px; }
   .stats dd { margin: 0; font-size: 20px; font-family: var(--f-display); font-weight: 700; }
 
   /* 한자 도장 아이콘 (지도 칸·메인 메뉴·지도 안내) */

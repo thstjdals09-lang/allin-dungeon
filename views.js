@@ -83,7 +83,9 @@
         <li><b>플롭이 깔리면</b> 손패 5장 중 핸드 2장을 고릅니다.</li>
         <li><b>플롭·턴·리버마다 베팅</b>합니다. 체크·벳·콜·레이즈·올인·폴드. 상대가 먼저 벳할 수도 있습니다.</li>
         <li><b>쇼다운</b>에서 진 쪽이 족보 값 × 팟만큼 스택을 잃습니다. 상대가 폴드하면 상대가 ${AD.ANTE} × 팟을 잃습니다.</li>
-        <li>이기면 <b>카드와 유물</b>로 덱을 키웁니다.</li>
+        <li>판마다 번갈아 <b>내가 먼저, 상대가 먼저</b> 베팅합니다. 상대가 먼저 체크하면 내 체크로 그 거리가 끝납니다.</li>
+        <li>이기면 <b>카드와 유물</b>로 덱을 키웁니다. 상점의 <b>족보 교본</b>은 그 족보의 값을 올립니다(레벨마다 +25%, 최고 ${AD.MAX_HAND_LV}).</li>
+        <li>보드와 상대 핸드는 내 덱과 <b>다른 덱</b>에서 나옵니다. 그래서 내 카드와 같은 카드가 보드에 깔릴 수 있습니다.</li>
       </ol>
       <h3 class="sub">요령</h3>
       <ul class="plist tips">${TIPS.map((t) => `<li><span>${t}</span></li>`).join('')}</ul>
@@ -147,7 +149,8 @@
       : btn('저장 데이터 지우기', 'wipeAsk', undefined, 'ghost wide');
     return `<h2 class="h">설정</h2>
       <div class="toggles">${fx ? toggle('효과음', !fx.muted, 'sound') + toggle('연출 빠르게', fx.fast, 'fast') : ''}</div>
-      ${wipe}`;
+      ${wipe}
+      <p class="note credits">아이콘 Lucide (ISC) · 연출 anime.js (MIT) · 글꼴 Hahmlet, IBM Plex Sans KR, IBM Plex Mono (SIL OFL)</p>`;
   }
 
   function menu(m, S) {
@@ -166,9 +169,26 @@
   }
 
   function charms(S) {
-    if (!S.charms.length) return '<h2 class="h">유물</h2><p class="note">아직 유물이 없습니다. 하이롤러·보스를 이기거나 상점에서 얻습니다.</p>';
+    const lv = Object.entries(S.handLv || {});
+    const levels = lv.length ? `<h3 class="sub">족보 레벨</h3><ul class="plist">${lv.map(([cat, n]) =>
+      `<li><b>${AD.HANDS[cat].name} 레벨 ${n}</b><span>족보 값 ${AD.HANDS[cat].value} → ${AD.handValue(cat, S.handLv)}</span></li>`).join('')}</ul>` : '';
+    if (!S.charms.length) return `<h2 class="h">유물</h2><p class="note">아직 유물이 없습니다. 하이롤러·보스를 이기거나 상점에서 얻습니다.</p>${levels}`;
     return `<h2 class="h">유물 · ${S.charms.length}개</h2>
-      <ul class="plist">${S.charms.map((id) => `<li><b>${AD.CHARMS[id].name}</b><span>${AD.CHARMS[id].desc}</span></li>`).join('')}</ul>`;
+      <ul class="plist">${S.charms.map((id) => `<li><b>${AD.CHARMS[id].name}</b><span>${AD.CHARMS[id].desc}</span></li>`).join('')}</ul>${levels}`;
+  }
+
+  // 첫 전투에 한 번 뜨는 안내
+  function coach() {
+    return `<h2 class="h">처음이라면</h2>
+      <ol class="howto">
+        <li>손패 5장 중 <b>2장을 골라 핸드</b>로 씁니다. 보드와 합쳐 가장 센 5장이 내 족보입니다.</li>
+        <li><b>체크</b>는 그대로 다음 카드, <b>벳</b>은 팟 +1, <b>올인</b>은 팟 +${AD.ALLIN_ADD} 뒤 바로 쇼다운입니다.</li>
+        <li>쇼다운에서 <b>진 쪽이 족보 값 × 팟</b>만큼 스택을 잃습니다. 화면의 "지면 스택 −N"을 보고 정하세요.</li>
+        <li><b>텔</b>은 상대 패의 힌트입니다. 초조하면 약할 때가 많습니다.</li>
+        <li>판마다 번갈아 <b>내가 먼저, 상대가 먼저</b> 베팅합니다.</li>
+        <li>보드는 내 덱과 <b>다른 덱</b>이라 내 카드와 같은 카드가 깔릴 수 있습니다.</li>
+      </ol>
+      <p class="note">카드와 아이콘은 길게 누르면(마우스는 올리면) 설명이 뜹니다. 이 안내는 메뉴의 게임 방법에서 다시 볼 수 있습니다.</p>`;
   }
 
   // 상대 수치를 플레이어가 읽을 수 있는 말로
@@ -315,6 +335,6 @@
     resetSeen: () => seen.clear(),
     title, map, sheet, cardNote,
     trickToken,
-    sheets: { howto, codex, records, settings, menu, charms, enemy, deck },
+    sheets: { howto, codex, records, settings, menu, charms, enemy, deck, coach },
   };
 })();

@@ -20,6 +20,10 @@
     { name: '파이브카드', value: 40 },
   ];
   const ROYAL_BONUS = 10;
+  // 족보 레벨: 상점의 족보 교본으로 올린다. 레벨마다 그 족보 값 +25%(반올림), 최대 MAX_HAND_LV
+  const HAND_LV_STEP = 0.25;
+  const MAX_HAND_LV = 4;
+  const handValue = (cat, levels = {}) => Math.round(HANDS[cat].value * (1 + HAND_LV_STEP * Math.min(levels[cat] || 0, MAX_HAND_LV)));
   const ANTE = 2; // 폴드하면 잃는 칩 = ANTE × 팟
   const ALLIN_ADD = 3; // 올인하면 팟 +3 (벳은 +1)
 
@@ -109,18 +113,24 @@
     { id: 'coward', floor: 1, kind: 'normal', name: '겁 많은 회사원', icon: 'frown', hp: 20, mul: 1, tight: 1.5, lie: 0, desc: '벳이 들어오면 쉽게 폴드한다.' },
     { id: 'local', floor: 1, kind: 'normal', name: '동네 타짜', icon: 'hand', hp: 26, mul: 1.2, tight: 0.9, lie: 0.25, desc: '이길 때 크게 가져간다.' },
     { id: 'drifter', floor: 1, kind: 'elite', name: '떠돌이 딜러', icon: 'compass', hp: 44, mul: 1.3, tight: 0.8, lie: 0.3, armor: 1, rule: 'stealChange', desc: '테이블을 옮겨 다니며 팟을 쓸어 간다.' },
+    { id: 'actor', floor: 1, kind: 'elite', name: '삼류 배우', icon: 'drama', hp: 40, mul: 1.2, tight: 0.8, lie: 0.6, bluff: 0.35, rule: 'swapRandom', desc: '표정도 보드도 연기다.' },
+    { id: 'guard', floor: 1, kind: 'boss', name: '철문 경비', icon: 'swords', hp: 62, mul: 1.2, tight: 0.7, lie: 0.2, armor: 2, bluff: 0.15, rule: 'bigPot', desc: '판돈부터 올리고 시작한다.' },
     { id: 'bear', floor: 1, kind: 'boss', name: '문지기 곰', icon: 'paw-print', hp: 70, mul: 1.3, tight: 0.6, lie: 0.2, armor: 2, bluff: 0.15, rule: 'forceAllin', desc: '1층 계단을 지키는 덩치.' },
 
     { id: 'loanshark', floor: 2, kind: 'normal', name: '사채업자', icon: 'hand-coins', hp: 34, mul: 1.2, tight: 0.9, lie: 0.2, heal: 4, desc: '이길 때마다 스택을 채운다.' },
     { id: 'twins', floor: 2, kind: 'normal', name: '쌍둥이 딜러', icon: 'users', hp: 28, mul: 0.9, tight: 1, lie: 0.2, hole: 3, desc: '카드 3장을 받아 그중에서 핸드를 고른다.' },
     { id: 'iron', floor: 2, kind: 'normal', name: '무쇠손', icon: 'hammer', hp: 34, mul: 1.2, tight: 0.8, lie: 0.2, armor: 2, desc: '져도 칩을 덜 잃는다.' },
     { id: 'magician', floor: 2, kind: 'elite', name: '카드 마술사', icon: 'wand-sparkles', hp: 40, mul: 0.9, tight: 0.8, lie: 0.6, hole: 3, bluff: 0.3, rule: 'swapRandom', desc: '텔도 카드도 믿을 수 없다.' },
+    { id: 'jeweler', floor: 2, kind: 'elite', name: '보석상', icon: 'gem', hp: 56, mul: 1.7, tight: 0.7, lie: 0.3, armor: 2, heal: 5, rule: 'stealChange', desc: '내 수를 줄이고 제 스택은 채운다.' },
+    { id: 'auditor', floor: 2, kind: 'boss', name: '장부 감사관', icon: 'glasses', hp: 62, mul: 1.05, tight: 0.6, poker: true, hole: 3, armor: 1, bluff: 0.15, rule: 'forceAllin', desc: '표정 없이 3판마다 전부 건다.' },
     { id: 'croupier', floor: 2, kind: 'boss', name: '수석 크루피어', icon: 'crown', hp: 48, mul: 0.85, tight: 0.5, lie: 0.3, hole: 3, armor: 1, bluff: 0.15, rule: 'rigBoard', desc: '2층의 모든 테이블을 돌리는 사람.' },
 
     { id: 'gambler', floor: 3, kind: 'normal', name: '빚더미 노름꾼', icon: 'dices', hp: 42, mul: 1.4, tight: 0.5, lie: 0.3, bluff: 0.25, desc: '잃을 게 없어서 폴드를 잘 안 한다.' },
     { id: 'ghost', floor: 3, kind: 'normal', name: '유령 손님', icon: 'ghost', hp: 40, mul: 1.4, tight: 0.9, poker: true, desc: '얼굴이 없어 텔도 없다.' },
     { id: 'banker', floor: 3, kind: 'normal', name: '금고지기', icon: 'vault', hp: 44, mul: 1.3, tight: 0.9, lie: 0.2, armor: 3, desc: '져도 칩을 많이 덜 잃는다.' },
     { id: 'shark', floor: 3, kind: 'elite', name: '큰손', icon: 'fish', hp: 44, mul: 1.1, tight: 0.6, lie: 0.3, hole: 3, armor: 1, rule: 'bigPot', desc: '큰 팟을 좋아한다.' },
+    { id: 'champ', floor: 3, kind: 'elite', name: '지난 대회 우승자', icon: 'trophy', hp: 58, mul: 1.5, tight: 0.7, lie: 0.3, armor: 1, rule: 'rigBoard', desc: '보드가 늘 그의 편이다.' },
+    { id: 'hostess', floor: 3, kind: 'boss', name: '하우스의 안주인', icon: 'library', hp: 68, mul: 1.05, tight: 0.4, lie: 0.3, hole: 3, armor: 2, bluff: 0.2, rule: 'rigBoard', desc: '모든 판의 기록을 쥐고 있다.' },
     { id: 'house', floor: 3, kind: 'boss', name: '하우스의 주인', icon: 'castle', hp: 85, mul: 1.3, tight: 0, poker: true, hole: 3, armor: 2, bluff: 0.15, rule: 'hiddenCard', desc: '폴드하지 않는다. 텔도 없다.' },
   ];
 
@@ -244,6 +254,15 @@
     return `${HANDS[res.cat].name} (${detail})`;
   }
 
+  // 같은 족보·같은 설명으로 갈린 승부의 이유: 처음으로 다른 숫자를 '이긴 쪽 > 진 쪽'으로. 설명이 다르면 ''
+  function kickerNote(a, b) {
+    if (!a || !b || a.cat !== b.cat || a.score === b.score || describe(a) !== describe(b)) return '';
+    const i = a.tb.findIndex((v, k) => v !== b.tb[k]);
+    if (i < 0) return '';
+    const [hi, lo] = a.score > b.score ? [a.tb[i], b.tb[i]] : [b.tb[i], a.tb[i]];
+    return `키커 ${rankLabel(hi)} > ${rankLabel(lo)}`;
+  }
+
   // 상대가 지금 보드에서 느끼는 자기 패의 힘 0~1
   const STRENGTH = [0.12, 0.42, 0.68, 0.8, 0.88, 0.9, 0.95, 0.99, 1, 1];
   function strength(hole, board) {
@@ -271,10 +290,11 @@
     return real;
   }
 
-  // 벳·올인을 받은 상대가 폴드하는지. 올인이 더 잘 폴드시킨다.
+  // 벳·올인을 받은 상대가 폴드하는지. 올인이 조금 더 잘 폴드시킨다(너무 후하면 '무조건 올인'이 최선이 된다 — test.js --sim 전략 비교).
+  const ALLIN_FOLD = 0.43;
   function enemyFolds(enemy, v, allin, foldBoost = 1, rng = Math.random) {
     if (!enemy.tight) return false;
-    const need = (allin ? 0.56 : 0.4) * enemy.tight * foldBoost;
+    const need = (allin ? ALLIN_FOLD : 0.4) * enemy.tight * foldBoost;
     return v + (rng() - 0.5) * 0.2 < need;
   }
 
@@ -352,13 +372,13 @@
   }
 
   // 쇼다운: 진 쪽이 (족보 값 + 보너스) × 팟 만큼 칩을 잃는다. 방어를 먼저 빼고, 그 결과에 연승 배수를 곱한다.
-  function resolveShowdown({ pres, eres, hole, pot, charms, enemy, deck = [], allin = false, streak = 0 }) {
+  function resolveShowdown({ pres, eres, hole, pot, charms, enemy, deck = [], allin = false, streak = 0, levels = {} }) {
     const has = (k) => charms.includes(k);
     const count = (en) => hole.filter((c) => c.en === en).length;
     const band = (id) => hole.filter((c) => rankTrait(c.r).id === id).length;
     const out = { winner: 0, toEnemy: 0, toPlayer: 0, heal: 0, enemyHeal: 0, gold: 0 };
     if (pres.score > eres.score) {
-      let base = HANDS[pres.cat].value * deckMult(pres.cat, deck, has) + (isRoyal(pres) ? ROYAL_BONUS : 0) + 4 * count('fire') + 2 * band('low');
+      let base = handValue(pres.cat, levels) * deckMult(pres.cat, deck, has) + (isRoyal(pres) ? ROYAL_BONUS : 0) + 4 * count('fire') + 2 * band('low');
       if (has('slim') && deck.length <= 14) base += 4;
       if (has('junkie') && allin) base += 12;
       if (has('fry') && pres.cat <= 1) base += 6;
@@ -461,11 +481,16 @@
     const out = [];
     for (let i = 0; i < a; i++) {
       const p = near(i);
-      const nextNear = i + 1 < a ? near(i + 1) : b - 1;
-      const targets = p + 1 < b && p + 1 <= nextNear && rng() < 0.45 ? [p, p + 1] : [p];
+      const lo = i > 0 ? Math.max(...out[i - 1]) : 0; // 앞 칸의 길보다 왼쪽으로 가면 엇갈린다
+      const hi = i + 1 < a ? near(i + 1) : b - 1;
+      const right = p + 1 <= hi;
+      const left = p - 1 >= lo;
+      // 갈 수 있는 한 두 갈래 이상 — 외길이면 지도에서 고를 것이 없다
+      const both = right && left && rng() < 0.4;
+      const targets = both ? [p - 1, p, p + 1] : right && (!left || rng() < 0.5) ? [p, p + 1] : left ? [p - 1, p] : [p];
       if (i > 0) { // 앞 칸과 이 칸 사이에 빈 아래 칸이 있으면 앞 칸에 잇는다
         const prev = out[i - 1];
-        out[i - 1] = [...prev, ...range(Math.max(...prev) + 1, p)];
+        out[i - 1] = [...prev, ...range(Math.max(...prev) + 1, targets[0])];
       }
       out.push(targets);
     }
@@ -485,7 +510,7 @@
   }
 
   const api = {
-    SUITS, rankLabel, HANDS, ROYAL_BONUS, ANTE, ALLIN_ADD, ENCHANTS, ENCHANT_IDS, RANK_TRAITS, rankTrait, CHARMS, TRICKS, TRICK_IDS, MAX_TRICKS, STARE_BOOST, trickRoom, rewardTrick, shopTricks, canUseTrick, ENEMIES, NODES, STEPS, FLOORS, TELLS, RULES,
+    SUITS, rankLabel, HANDS, ROYAL_BONUS, HAND_LV_STEP, MAX_HAND_LV, handValue, kickerNote, ANTE, ALLIN_ADD, ENCHANTS, ENCHANT_IDS, RANK_TRAITS, rankTrait, CHARMS, TRICKS, TRICK_IDS, MAX_TRICKS, STARE_BOOST, trickRoom, rewardTrick, shopTricks, canUseTrick, ENEMIES, NODES, STEPS, FLOORS, TELLS, RULES,
     seedNext, seedFromDate, shuffle, pick, starterDeck, tableDeck, eval5, best, isRoyal, describe, strength, tellOf, enemyFolds, enemyAct,
     isForcedAllin, ruleNotice, rigCard, equityAtFlop, reviewVerdict, visibleBoard, foldDamage, streakMult, STREAK_STEP, STREAK_MAX, AFFIXES, AFFIX_IDS, affixCount, rollAffixes, applyAffixes, resolveShowdown, pickEnemy, mergeableRanks, mergeCards, randomCard, randomCharms, genFloorMap, choicesAt, migrateSave,
   };

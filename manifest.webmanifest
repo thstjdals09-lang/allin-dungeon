@@ -1,0 +1,16 @@
+{
+  "name": "올인 던전",
+  "short_name": "올인 던전",
+  "description": "핸드 2장으로 지하 3층 하우스를 터는 헤즈업 홀덤 로그라이크",
+  "lang": "ko",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#12080d",
+  "theme_color": "#2a1520",
+  "icons": [
+    { "src": "icon-192.png", "sizes": "192x192", "type": "image/png" },
+    { "src": "icon-512.png", "sizes": "512x512", "type": "image/png" }
+  ]
+}

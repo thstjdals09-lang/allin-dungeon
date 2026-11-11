@@ -13,6 +13,7 @@ window.BATTLE = function (C) {
     C.S.battle = { enemy: { ...armed, maxHp: armed.hp }, streak: 0, draw: AD.shuffle(C.S.deck, rnd), discard: [], hand: [], handNo: 0, log: [] };
     remember('enemies', e.id);
     C.S.screen = 'battle';
+    if (kind === 'boss') C.S.bossId = e.id;
     startHand();
   }
 
@@ -78,6 +79,8 @@ window.BATTLE = function (C) {
     b.flop = null;
     b.peek = null; // 엿본 다음 카드 {id}
     b.stare = false; // 이번 거리 노려보기
+    b.lead = b.handNo % 2 === 0; // 짝수 판은 상대가 먼저 행동한다(포지션 교대)
+    b.echeck = false;
     b.phase = 'pick';
     ui.trickSel = null;
     ui.swap = false;
@@ -121,6 +124,16 @@ window.BATTLE = function (C) {
     b.table = b.table.slice(1);
     ui.swap = false;
     readEnemy(b);
+    enemyLead(b);
+  }
+
+  // 상대가 먼저인 판: 거리가 열리면 상대가 벳하거나 체크한다. 체크했으면 내 체크로 그 거리가 끝난다.
+  function enemyLead(b) {
+    b.echeck = false;
+    if (!b.lead || b.facing) return;
+    if (AD.enemyAct(b.enemy, b.str, 'none', rnd) === 'bet') return enemyRaised(b, 'bet', b.pot, `${STREETS[b.street]} 상대 먼저 벳 · 팟 ×${b.pot + 1}`);
+    b.echeck = true;
+    log(`${STREETS[b.street]} 상대 먼저 체크`);
   }
 
   // 상대가 올린 상태: 폴드하면 올리기 전 팟 기준으로 잃는다
@@ -141,7 +154,7 @@ window.BATTLE = function (C) {
     const where = `${STREETS[b.street]}${b.facing ? ` 상대 ${b.facing.kind === 'bet' ? '벳' : '레이즈'} →` : ''} ${allin ? '올인' : word}`;
     const act = AD.enemyAct(b.enemy, b.str, allin ? 'allin' : canReraise ? 'bet' : 'raise', rnd, (has('face') ? 1.25 : 1) * (b.stare ? AD.STARE_BOOST : 1));
     if (act === 'fold') {
-      const d = AD.foldDamage(b.pot, C.S.charms, b.streak);
+      const d = AD.foldDamage(before + 1, C.S.charms, b.streak); // 올인에 폴드해도 벳에 폴드한 만큼만 잃는다
       payGold(b);
       if (has('bluffbadge')) { C.S.gold += 4; log('허풍선이 배지 · 상금 +4'); }
       b.enemy.hp -= d;
@@ -196,7 +209,7 @@ window.BATTLE = function (C) {
   function showdown(b) {
     const pres = AD.best([...b.hole, ...b.board]);
     const eres = AD.best([...b.ehole, ...b.board]);
-    const out = AD.resolveShowdown({ pres, eres, hole: b.hole, pot: b.pot, charms: C.S.charms, enemy: b.enemy, deck: C.S.deck, allin: b.allin, streak: b.streak });
+    const out = AD.resolveShowdown({ pres, eres, hole: b.hole, pot: b.pot, charms: C.S.charms, enemy: b.enemy, deck: C.S.deck, allin: b.allin, streak: b.streak, levels: C.S.handLv });
     payGold(b);
     b.shown = b.shown.map(() => true);
     b.enemy.hp = Math.min(b.enemy.maxHp, b.enemy.hp - out.toEnemy + out.enemyHeal);
@@ -207,7 +220,7 @@ window.BATTLE = function (C) {
     if (out.winner > 0) C.S.stats.won++;
     note({ bestHand: Math.max(C.P.bestHand, pres.cat), bestHit: Math.max(C.P.bestHit, out.toEnemy) });
     const result = {
-      type: 'show', ...out, pdesc: AD.describe(pres), edesc: AD.describe(eres),
+      type: 'show', ...out, pdesc: AD.describe(pres), edesc: AD.describe(eres), kick: AD.kickerNote(pres, eres),
       used: pres.cards.map((c) => c.id), eused: eres.cards.map((c) => c.id),
     };
     fx({
@@ -271,14 +284,14 @@ window.BATTLE = function (C) {
     const r = b.result;
     if (r.type === 'pfold') return `<p class="result lose">폴드 · 스택 −${r.toPlayer}</p>`;
     if (r.type === 'efold') return `<p class="result win">상대 폴드 · 상대 스택 −${r.toEnemy}</p>`;
-    const vs = `내 <b>${r.pdesc}</b> vs 상대 <b>${r.edesc}</b>`;
+    const vs = `내 <b>${r.pdesc}</b> vs 상대 <b>${r.edesc}</b>${r.kick ? ` · ${r.kick}` : ''}`;
     if (r.winner > 0) return `<p class="result win">승리 · ${vs} · 상대 스택 −${r.toEnemy}${r.heal ? ` · 스택 +${r.heal}` : ''}${r.gold ? ` · 상금 +${r.gold}` : ''}</p>`;
     if (r.winner < 0) return `<p class="result lose">패배 · ${vs} · 스택 −${r.toPlayer}${r.enemyHeal ? ` · 상대 스택 +${r.enemyHeal}` : ''}</p>`;
     return `<p class="result">스플릿 · 둘 다 <b>${r.pdesc}</b></p>`;
   }
 
   const VERDICT = { regret: '폴드가 아까웠다', reckless: '무리했다' };
-  const reviewLine = (r) => (r.eq === undefined ? '' : `<p class="review">플롭 승률 ${r.eq}%${r.verdict ? ` · ${VERDICT[r.verdict]}` : ''}</p>`);
+  const reviewLine = (r) => (r.eq === undefined ? '' : `<p class="review">복기 · 플롭 때 내 승률 ${r.eq}%${r.verdict ? ` · ${VERDICT[r.verdict]}` : ''}</p>`);
 
   function battleActions(b) {
     if (b.phase === 'pick') {
@@ -321,7 +334,19 @@ window.BATTLE = function (C) {
 
   // 지금 패 그대로 이기면 상대가 잃을 칩 — 규칙 엔진의 계산을 그대로 쓴다
   function winIfNow(b, hole, pres) {
-    return AD.resolveShowdown({ pres, eres: { score: -1, cat: 0 }, hole, pot: b.pot, charms: C.S.charms, enemy: b.enemy, deck: C.S.deck, allin: b.allin || (!!b.facing && b.facing.kind === 'allin'), streak: b.streak }).toEnemy;
+    return AD.resolveShowdown({ pres, eres: { score: -1, cat: 0 }, hole, pot: b.pot, charms: C.S.charms, enemy: b.enemy, deck: C.S.deck, allin: b.allin || (!!b.facing && b.facing.kind === 'allin'), streak: b.streak, levels: C.S.handLv }).toEnemy;
+  }
+  // 지금 팟에서 상대가 cat 족보로 이기면 내가 잃을 칩
+  function loseIfNow(b, hole, cat) {
+    return AD.resolveShowdown({ pres: { score: -1, cat: 0 }, eres: { score: 1, cat }, hole, pot: b.pot, charms: C.S.charms, enemy: b.enemy, deck: C.S.deck, allin: b.allin || (!!b.facing && b.facing.kind === 'allin'), streak: b.streak }).toPlayer;
+  }
+  // 위험: 원페어~트리플에 졌을 때 잃는 칩. 화면이 좁아 내 패 줄 끝에 붙이고, 자세한 말은 말풍선에.
+  function riskBit(b, hole) {
+    const lo = loseIfNow(b, hole, 1);
+    const hi = loseIfNow(b, hole, 3);
+    const dead = lo >= C.S.hp;
+    const foldWin = b.enemy.tight ? ` 벳에 상대가 폴드하면 상대 −${AD.foldDamage(b.pot + 1, C.S.charms, b.streak)}.` : '';
+    return ` · <span class="risk${dead ? ' dead' : hi >= C.S.hp ? ' warn' : ''}" data-tip="상대가 원페어로 이기면 내 스택 −${lo}, 트리플로 이기면 −${hi}. 더 센 족보면 더 잃습니다.${foldWin}">${dead ? '지면 탈락' : `지면 <b class="num">−${lo}~−${hi}</b>`}</span>`;
   }
 
   // 엿본 카드가 아직 다음 차례인지(보드 체인지로 바뀌었으면 아님)
@@ -368,7 +393,7 @@ window.BATTLE = function (C) {
       ? btn(ui.swap ? '취소' : `보드 체인지 · ${swapCost()}`, 'swapmode', undefined, 'ghost sm', !ui.swap && b.changes < swapCost())
       : '';
     const status = `<div class="status">
-      ${pres ? `<p class="mine">지금 내 패 <b>${AD.describe(pres)}</b> · 이기면 상대 <b class="num">−${winIfNow(b, holeNow, pres)}</b></p>` : ''}
+      ${pres ? `<p class="mine"><b>${AD.describe(pres)}</b> · 이기면 상대 <b class="num">${((w) => (w >= b.enemy.hp ? 'K.O.' : `−${w}`))(winIfNow(b, holeNow, pres))}</b>${riskBit(b, holeNow)}</p>` : ''}
       <div class="row">
         <span class="pips" aria-label="체인지 ${b.changes}번 남음"><span class="lbl">체인지</span>${pips}</span>
         ${swapBtn}
@@ -376,17 +401,18 @@ window.BATTLE = function (C) {
     </div>`;
 
     let hint = '';
-    if (b.phase === 'pick') hint = '핸드 2장을 고르세요. 고른 카드는 체인지로 바꿀 수 있습니다.';
+    if (b.phase === 'pick') hint = `핸드 2장을 고르세요. 고른 카드는 체인지로 바꿀 수 있습니다.${b.lead ? ' 이번 판은 상대가 먼저 베팅합니다.' : ''}`;
     else if (b.phase === 'bet') {
       hint = b.facing ? (b.facing.kind === 'allin' ? '폴드하거나 콜해서 남은 카드를 깔고 쇼다운하세요.' : b.facing.kind === 'bet' ? '콜하면 다음 카드, 레이즈하면 되받아칩니다.' : '콜하거나 폴드하세요. 이 거리 레이즈는 끝났습니다.')
         : ui.swap ? '바꿀 보드 카드를 누르세요.'
+        : b.echeck ? `상대가 체크했습니다. 체크하면 ${b.street === 2 ? '쇼다운' : '다음 카드'}, 벳하면 상대가 답합니다.`
         : b.street === 2 ? '리버 베팅. 끝나면 쇼다운입니다.' : `${STREETS[b.street]} 베팅. 체크하면 ${['턴이', '리버가'][b.street]} 열립니다.`;
     }
 
     return `<main class="screen battle">
       ${enemyPanel(b)}
       <section class="board${ui.swap ? ' swapping' : ''}" aria-label="보드">
-        ${b.facing && b.phase === 'bet' ? `<p class="facing" role="status">상대 ${{ bet: '벳', raise: '레이즈', allin: '올인' }[b.facing.kind]} · 팟 ×${b.pot}</p>` : ''}
+        ${b.facing && b.phase === 'bet' ? `<p class="facing" role="status">상대 ${{ bet: '벳', raise: '레이즈', allin: '올인' }[b.facing.kind]} · 팟 ×${b.pot}</p>` : b.echeck && b.phase === 'bet' ? '<p class="facing calm" role="status">상대 체크</p>' : ''}
         <div class="potline">${stepper(b)}<span class="potr">${streakChip(b.streak)}<b class="num pot">팟 ×${b.pot}</b></span></div>
         <div class="cards">${board}</div>
       </section>
@@ -429,12 +455,13 @@ window.BATTLE = function (C) {
       fx({ t: 'lock' });
       b.dead = [];
       applyLockRules(b);
+      enemyLead(b);
       b.flop = b.board.slice(0, 3); // 내가 실제로 맞선 플롭
     },
     check() {
       const b = C.S.battle;
       fx({ t: 'check' });
-      if (AD.enemyAct(b.enemy, b.str, 'none', rnd) === 'bet') {
+      if (!b.lead && AD.enemyAct(b.enemy, b.str, 'none', rnd) === 'bet') {
         return enemyRaised(b, 'bet', b.pot, `${STREETS[b.street]} 체크 → 상대 벳 · 팟 ×${b.pot + 1}`);
       }
       log(`${STREETS[b.street]} 체크`);
