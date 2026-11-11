@@ -38,6 +38,7 @@
 
   /* ───────── 진행 ───────── */
   function newRun() {
+    seen.clear(); // 카드 id 가 c0 부터 다시 쓰이므로 딜 연출 기록도 비운다
     S = {
       v: VERSION, screen: 'map', hp: START_STACK, maxHp: START_STACK, gold: 40, deck: [], charms: [],
       floor: 1, step: 0, node: null, choices: AD.mapChoices(0, rnd), removeCost: 50, nextId: 0,
@@ -747,9 +748,14 @@
     const screen = S ? S.screen : 'title';
     const changed = screen !== ui.screen;
     ui.screen = screen;
-    if (window.FX) FX.run(ui.fx, { changed, screen, from: ui.from });
-    ui.fx = [];
-    ui.from = null;
+    try {
+      if (window.FX) FX.run(ui.fx, { changed, screen, from: ui.from });
+    } catch (e) {
+      console.error('연출 실패 — 게임은 계속:', e); // 연출만 빠지고 상태·화면은 이미 그려졌다
+    } finally {
+      ui.fx = [];
+      ui.from = null;
+    }
   }
 
   // 아티팩트 뷰어가 새 버전을 받아도 판이 이어지게. 형식이 다른 옛 상태는 버린다.

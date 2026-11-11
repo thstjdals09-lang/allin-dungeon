@@ -352,7 +352,7 @@
     font-family: var(--f-display); font-weight: 800; font-size: 20px; color: var(--bad);
     padding: 2px 12px; border: 3px solid var(--bad); border-radius: 6px; background: #12080dcc;
   }
-  .actions.wait { opacity: 0; pointer-events: none; }
+  .actions.wait { opacity: 0; visibility: hidden; pointer-events: none; }
 
   /* 타이틀 장식: 떠다니는 무늬, 로열 플러시 부채 */
   .title { position: relative; }
@@ -391,7 +391,8 @@
   }
 </style>
 <div id="app"></div>
-<script src="https://cdn.jsdelivr.net/npm/animejs@4.2.2/dist/bundles/anime.umd.min.js"></script>
+<!-- 연출용. async: 이 주소가 늦거나 막혀도 게임은 바로 뜨고, 도착한 뒤부터 움직임이 켜진다 -->
+<script async src="https://cdn.jsdelivr.net/npm/animejs@4.2.2/dist/bundles/anime.umd.min.js" integrity="sha384-WxuE+98aTTR32yUCKdZWcpkcOiw9u2Hq1AiAnXM2Dts06K0D23kYXesJSuq1OeLZ" crossorigin="anonymous"></script>
 <script src="logic.js"></script>
 <script src="fx.js"></script>
 <script src="game.js"></script>

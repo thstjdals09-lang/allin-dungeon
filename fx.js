@@ -1,30 +1,46 @@
 /* 올인 던전 — 연출(애니메이션·효과음). game.js 가 화면을 그린 뒤 FX.run(이벤트, 옵션)을 부른다.
-   anime.js 를 못 불러왔거나 '동작 줄이기' 설정이면 움직임은 건너뛰고, 화면은 그린 그대로 완성된 상태다. */
+   anime.js 는 비동기로 온다. 아직 안 왔거나 못 왔거나 '동작 줄이기' 설정이면 움직임은 건너뛰고,
+   화면은 그린 그대로 완성된 상태다. */
 (function () {
   'use strict';
-  const A = window.anime;
   const reduce = !!(window.matchMedia && matchMedia('(prefers-reduced-motion: reduce)').matches);
-  const moving = !!(A && A.animate) && !reduce;
   const SOUND_KEY = 'allin-dungeon-sound';
   const EASE = 'outExpo';
   const $ = (s, r = document) => r.querySelector(s);
   const $$ = (s, r = document) => [...r.querySelectorAll(s)];
-  const later = (ms, fn) => (ms > 0 ? setTimeout(fn, ms) : fn());
+  let A = null;
+  // anime 가 늦게 도착해도 그 뒤 연출부터는 켜지게 매번 확인한다
+  function on() {
+    if (!A && window.anime && window.anime.animate) A = window.anime;
+    return !!A && !reduce;
+  }
+
+  // 화면을 다시 그릴 때마다 회차가 바뀐다. 예약해 둔 연출은 자기 회차가 아니면 건너뛴다.
+  let gen = 0;
+  function later(ms, fn) {
+    const mine = gen;
+    const go = () => { if (mine === gen) fn(); };
+    if (ms > 0) setTimeout(go, ms);
+    else go();
+  }
 
   /* ───────── 효과음: 파일 없이 WebAudio 로 합성 ───────── */
   let ctx = null;
   let muted = false;
   try { muted = localStorage.getItem(SOUND_KEY) === 'off'; } catch (e) { /* 저장소가 막힌 브라우저: 기본값(켬) */ }
 
-  function audio() {
+  // 브라우저는 사용자 동작 안에서 만든 오디오만 허락한다 — 첫 터치·키 입력 때 만든다
+  function unlock() {
     if (!ctx) {
       const C = window.AudioContext || window.webkitAudioContext;
-      if (!C) return null;
-      ctx = new C();
+      if (C) ctx = new C();
     }
-    if (ctx.state === 'suspended') ctx.resume();
-    return ctx;
+    if (ctx && ctx.state !== 'running') ctx.resume().catch(() => { /* 다음 터치 때 다시 시도 */ });
   }
+  document.addEventListener('pointerdown', unlock, true);
+  document.addEventListener('keydown', unlock, true);
+  const audio = () => (ctx && ctx.state === 'running' ? ctx : null);
+
   function tone(freq, dur, { type = 'sine', gain = 0.1, at = 0, to } = {}) {
     const c = audio();
     if (!c) return;
@@ -84,19 +100,25 @@
   // 들어오는 연출은 끝나면 인라인 스타일을 지워 CSS 상태(선택 카드 들림 등)로 돌아가게 한다
   const clean = (els) => () => els.forEach((el) => { el.style.transform = ''; el.style.opacity = ''; });
 
-  function float(anchor, text, cls) {
-    if (!moving || !anchor || !anchor.isConnected) return;
-    const r = anchor.getBoundingClientRect();
+  // body 에 잠깐 붙였다가 연출이 끝나면 떼는 요소
+  function overlay(cls, html, style = {}) {
     const el = document.createElement('div');
-    el.className = `float ${cls}`;
-    el.textContent = text;
-    el.style.left = `${r.left + r.width / 2}px`;
-    el.style.top = `${r.top + r.height / 2}px`;
+    el.className = cls;
+    el.innerHTML = html;
+    Object.assign(el.style, style);
     document.body.appendChild(el);
+    return el;
+  }
+
+  function float(anchor, text, cls) {
+    if (!on() || !anchor || !anchor.isConnected) return;
+    const r = anchor.getBoundingClientRect();
+    const el = overlay(`float ${cls}`, '', { left: `${r.left + r.width / 2}px`, top: `${r.top + r.height / 2}px`, opacity: '0' });
+    el.textContent = text;
     A.animate(el, {
       y: [0, -52],
       scale: [0.5, 1.15, 1],
-      opacity: [{ to: 1, duration: 100 }, { to: 0, delay: 650, duration: 350 }],
+      opacity: [{ from: 0, to: 1, duration: 100 }, { to: 0, delay: 650, duration: 350 }],
       duration: 1100,
       ease: EASE,
       onComplete: () => el.remove(),
@@ -104,29 +126,23 @@
   }
 
   function shake(el, power = 6) {
-    if (!moving || !el || !el.isConnected) return;
+    if (!on() || !el || !el.isConnected) return;
     A.animate(el, { x: [0, -power, power, -power / 2, power / 2, 0], duration: 420, ease: 'inOutSine', onComplete: clean([el]) });
   }
 
   function burst(anchor, n = 20) {
-    if (!moving || !anchor || !anchor.isConnected) return;
+    if (!on() || !anchor || !anchor.isConnected) return;
     const r = anchor.getBoundingClientRect();
     const colors = ['#d1ab5c', '#a3263a', '#2f5f8f', '#f4ecdc', '#15100f'];
-    const parts = Array.from({ length: n }, (_, i) => {
-      const el = document.createElement('i');
-      el.className = 'spark';
-      el.style.left = `${r.left + r.width / 2}px`;
-      el.style.top = `${r.top + r.height / 2}px`;
-      el.style.setProperty('--c', colors[i % colors.length]);
-      document.body.appendChild(el);
-      return el;
-    });
+    const parts = Array.from({ length: n }, () =>
+      overlay('spark', '', { left: `${r.left + r.width / 2}px`, top: `${r.top + r.height / 2}px`, opacity: '0' }));
+    parts.forEach((p, i) => p.style.setProperty('--c', colors[i % colors.length]));
     A.animate(parts, {
       x: () => A.utils.random(-150, 150),
       y: () => A.utils.random(-170, 70),
       rotate: () => A.utils.random(-400, 400),
       scale: [0.4, 1],
-      opacity: [{ to: 1, duration: 60 }, { to: 0, delay: 520, duration: 420 }],
+      opacity: [{ from: 0, to: 1, duration: 60 }, { to: 0, delay: 520, duration: 420 }],
       duration: 1050,
       ease: EASE,
       onComplete: () => parts.forEach((p) => p.remove()),
@@ -134,31 +150,27 @@
   }
 
   function flash(cls) {
-    if (!moving) return;
-    const el = document.createElement('div');
-    el.className = `flash ${cls}`;
-    document.body.appendChild(el);
+    if (!on()) return;
+    const el = overlay(`flash ${cls}`, '', { opacity: '0.55' });
     A.animate(el, { opacity: [0.55, 0], duration: 650, ease: 'outQuad', onComplete: () => el.remove() });
   }
 
   // 족보 컷인: 화면 가운데에 큰 글씨가 찍혔다 사라진다
   function cutin(text, tone = '') {
     sound('big');
-    if (!moving) return;
-    const el = document.createElement('div');
-    el.className = `cutin ${tone}`;
-    el.innerHTML = `<b>${text}</b>`;
-    document.body.appendChild(el);
+    if (!on()) return;
+    const el = overlay(`cutin ${tone}`, `<b>${text}</b>`, { opacity: '0' });
     A.createTimeline({ onComplete: () => el.remove() })
       .add(el, { opacity: [0, 1], duration: 120, ease: 'linear' }, 0)
       .add(el.firstChild, { scale: [2.6, 1], rotate: [-10, -4], duration: 420, ease: EASE }, 0)
       .add(el, { opacity: 0, duration: 260, ease: 'inQuad' }, 820);
   }
 
-  // 결과가 다 보일 때까지 다음 버튼을 숨겨 둔다 (연출을 건너뛰고 누르지 않게)
+  // 결과가 다 보일 때까지 다음 버튼을 숨긴다(visibility 라 키보드로도 못 누른다).
+  // 중간에 다시 그려지면 새 화면은 숨김 없이 그려지므로 버튼이 막힌 채 남지 않는다.
   function holdActions(until) {
     const el = $('.battle .actions');
-    if (!moving || !el) return;
+    if (!on() || !el) return;
     el.classList.add('wait');
     later(until, () => {
       el.classList.remove('wait');
@@ -167,12 +179,12 @@
   }
 
   function appear(el, at) {
-    if (!moving || !el) return;
+    if (!on() || !el) return;
     el.style.opacity = '0';
     later(at, () => A.animate(el, { y: [12, 0], opacity: [0, 1], duration: 480, ease: EASE, onComplete: clean([el]) }));
   }
 
-  /* ───────── 막대: 다시 그려도 직전 값에서 이어서 줄어들거나 늘어난다 ───────── */
+  /* ───────── 막대: 같은 화면에서 다시 그리면 직전 값에서 이어서 움직인다 ───────── */
   const bars = new Map();
   function animateBars(delay) {
     $$('.bar[data-key]').forEach((bar) => {
@@ -180,7 +192,7 @@
       const now = +bar.dataset.v;
       const before = bars.get(bar.dataset.key);
       bars.set(bar.dataset.key, now);
-      if (!moving || before === undefined || Math.abs(before - now) < 0.001) return;
+      if (!on() || before === undefined || Math.abs(before - now) < 0.001) return;
       fill.style.transform = `scaleX(${before})`;
       A.animate(fill, { scaleX: [before, now], duration: 750, delay, ease: EASE });
     });
@@ -188,7 +200,7 @@
 
   /* ───────── 카드가 깔리는 연출 ───────── */
   function flipIn(cards, at) {
-    if (!moving || !cards.length) return at;
+    if (!on() || !cards.length) return at;
     cards.forEach((c) => { c.style.opacity = '0'; });
     later(at, () => {
       sound('card');
@@ -201,7 +213,7 @@
     const fresh = $$('.card.deal').filter((c) => !(skipEnemy && c.closest('.ehole')));
     if (!fresh.length) return;
     sound('card');
-    if (!moving) return;
+    if (!on()) return;
     const flips = fresh.filter((c) => c.closest('.ehole'));
     const drops = fresh.filter((c) => !c.closest('.ehole') && !c.closest('.offer'));
     if (drops.length) {
@@ -218,7 +230,7 @@
     const main = $('main');
     if (!main) return;
     if (screen === 'over' || screen === 'win') sound(screen === 'win' ? 'win' : 'bust');
-    if (!moving) return;
+    if (!on()) return;
     const parts = [...main.children].filter((el) => !el.classList.contains('drifts'));
     A.animate(parts, { y: [22, 0], opacity: [0, 1], duration: 640, delay: A.stagger(70), ease: EASE, onComplete: clean(parts) });
     const nodes = $$('.node, .charmcard', main);
@@ -241,21 +253,17 @@
     check(ev, at) {
       sound('check');
       const pot = $('.potline');
-      if (moving && pot) A.animate(pot, { scale: [1.15, 1], duration: 380, ease: EASE, onComplete: clean([pot]) });
+      if (on() && pot) A.animate(pot, { scale: [1.15, 1], duration: 380, ease: EASE, onComplete: clean([pot]) });
       return at;
     },
     chip(ev, at, opt) {
       sound('chip');
       const pot = $('.potline b');
-      if (!moving || !opt.from || !pot) return at;
+      if (!on() || !opt.from || !pot) return at;
       const to = pot.getBoundingClientRect();
       const fx = opt.from.left + opt.from.width / 2;
       const fy = opt.from.top + opt.from.height / 2;
-      const chip = document.createElement('i');
-      chip.className = `flychip${ev.allin ? ' allin' : ''}`;
-      chip.style.left = `${fx}px`;
-      chip.style.top = `${fy}px`;
-      document.body.appendChild(chip);
+      const chip = overlay(`flychip${ev.allin ? ' allin' : ''}`, '', { left: `${fx}px`, top: `${fy}px` });
       A.animate(chip, {
         x: [0, to.left + to.width / 2 - fx],
         y: [0, to.top + to.height / 2 - fy],
@@ -275,7 +283,7 @@
       const used = $$('.board .card.used, .hand .card.used, .ehole .card.used');
       later(t, () => {
         sound(ev.winner > 0 ? 'win' : ev.winner < 0 ? 'lose' : 'card');
-        if (moving && used.length) A.animate(used, { scale: [1, 1.1, 1], duration: 480, delay: A.stagger(35), ease: 'inOutSine', onComplete: clean(used) });
+        if (on() && used.length) A.animate(used, { scale: [1, 1.1, 1], duration: 480, delay: A.stagger(35), ease: 'inOutSine', onComplete: clean(used) });
       });
       if (ev.winner > 0 && ev.cat >= 4) { later(t + 250, () => cutin(ev.name)); t += 900; }
       appear($('.result'), t);
@@ -290,7 +298,7 @@
       later(at, () => {
         sound('fold');
         const panel = $('.enemy');
-        if (!moving || !panel) return;
+        if (!on() || !panel) return;
         const stamp = document.createElement('div');
         stamp.className = 'stamp';
         stamp.textContent = '폴드';
@@ -306,7 +314,7 @@
     pfold(ev, at) {
       sound('fold');
       const mine = $$('.hand .card.sel');
-      if (moving && mine.length) A.animate(mine, { y: [0, 36], rotate: [0, 8], opacity: [1, 0.25], duration: 420, ease: 'inQuad' });
+      if (on() && mine.length) A.animate(mine, { y: [0, 36], rotate: [0, 8], opacity: [1, 0.25], duration: 420, ease: 'inQuad' });
       appear($('.result'), at + 250);
       later(at + 250, () => hitOutcome({ toPlayer: ev.d, bust: ev.bust }));
       barDelay = at + 250;
@@ -325,7 +333,7 @@
     if (ev.toPlayer) {
       sound('hit');
       float($('.top .stack'), `−${ev.toPlayer}`, 'bad');
-      shake($('#app'), ev.toPlayer >= 15 ? 8 : 4);
+      shake($('main'), ev.toPlayer >= 15 ? 8 : 4); // #app 을 흔들면 그 안의 고정 위치 모달이 같이 튄다
       if (ev.toPlayer >= 15) flash('red');
     }
     if (ev.heal) float($('.top .stack'), `+${ev.heal}`, 'good');
@@ -335,7 +343,9 @@
   }
 
   function run(events, opt) {
+    gen++;
     barDelay = 0;
+    if (opt.changed) bars.clear(); // 다른 화면·다른 상대의 막대 값에서 이어지지 않게
     const busy = events.some((e) => e.t === 'show' || e.t === 'efold');
     if (opt.changed) enter(opt.screen);
     deal(busy);
