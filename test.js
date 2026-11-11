@@ -184,6 +184,34 @@ assert.strictEqual(AD.pickEnemy(1, 'normal').bluff >= 0.1, true);
   assert.strictEqual(AD.visibleBoard({}, full, false).length, 5);
 }
 
+
+// 오늘의 도전: 같은 시드면 난수열·지도·덱이 같다
+{
+  const META = require('./meta.js');
+  const gen = (seed) => { let st = AD.seedFromDate(seed); return () => { const r = AD.seedNext(st); st = r.state; return r.value; }; };
+  const seq = (seed) => { const r = gen(seed); return Array.from({ length: 20 }, r); };
+  assert.deepStrictEqual(seq('20261111'), seq('20261111'));
+  assert.notDeepStrictEqual(seq('20261111'), seq('20261112'));
+  assert.ok(seq('20261111').every((v) => v >= 0 && v < 1));
+  const make = (seed) => { const r = gen(seed); let n = 0; return { map: AD.genFloorMap(r), deck: AD.starterDeck(() => 'c' + n++, r) }; };
+  assert.deepStrictEqual(make('20261111'), make('20261111'));
+  assert.notDeepStrictEqual(make('20261111'), make('20261112'));
+  // 난이도·캐릭터·기록
+  const e = { hp: 100, mul: 1.3, kind: 'boss' };
+  assert.deepStrictEqual([0, 1, 4, 5].map((l) => META.scaleEnemy(e, l).hp), [100, 110, 110, 138]);
+  assert.strictEqual(META.scaleEnemy(e, 4).mul, 1.43);
+  assert.strictEqual(META.scaleEnemy({ ...e, kind: 'normal' }, 5).hp, 110);
+  assert.deepStrictEqual([0, 2].map((l) => META.price(30, l)), [30, 36]);
+  assert.strictEqual(META.startStack('whale', 3), 55);
+  assert.deepStrictEqual([0, 5, 5].map((l, i) => META.nextMaxLevel([0, 2, 5][i], l)), [1, 5, 5]);
+  assert.ok(!META.unlocked(META.charOf('reader'), { wins: 1 }) && META.unlocked(META.charOf('reader'), { wins: 2 }));
+  const lose = { floor: 3, won: false }, win = { floor: 1, won: true };
+  assert.strictEqual(META.betterDaily(lose, win), win);
+  assert.strictEqual(META.betterDaily(win, lose), win);
+  assert.strictEqual(META.betterDaily({ floor: 1, won: false }, lose), lose);
+  assert.strictEqual(META.betterDaily(undefined, lose), lose);
+  assert.strictEqual(META.todayKey(new Date(2026, 10, 5)), '20261105');
+}
 console.log('logic 테스트 통과');
 
 if (process.argv.includes('--sim')) sim();

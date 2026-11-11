@@ -2,8 +2,8 @@
    배경 그림은 scenes.js(SCENES), 연출은 fx.js(FX). */
 (function () {
   'use strict';
-  const VERSION = 7; // v7: 이벤트 본 기록(seenEvents)·층 버프(floorBuff)·알아낸 보스(bossId)가 생겼다. v6: v6: 카드 복제 비용(dupCost)이 생겼다. v5: v5: 상대 고유 규칙(enemy.rule)·강제 올인 facing 이 생겼다. v4: 상대 벳·레이즈(battle.facing)가 생겨 v3 전투 저장과 다르다. v3: 층 지도가 갈림길(map·path)로 바뀌어 v2 저장과 형식이 다르다
-  const SAVE_KEY = 'allin-dungeon-v7';
+  const VERSION = 8; // v8: 캐릭터(char)·난이도(level)·오늘의 도전(daily·rngState)이 생겼다. v7: 이벤트 본 기록(seenEvents)·층 버프(floorBuff)·알아낸 보스(bossId)가 생겼다. v6: v6: 카드 복제 비용(dupCost)이 생겼다. v5: v5: 상대 고유 규칙(enemy.rule)·강제 올인 facing 이 생겼다. v4: 상대 벳·레이즈(battle.facing)가 생겨 v3 전투 저장과 다르다. v3: 층 지도가 갈림길(map·path)로 바뀌어 v2 저장과 형식이 다르다
+  const SAVE_KEY = 'allin-dungeon-v8';
   const PROFILE_KEY = 'allin-dungeon-profile';
   const START_STACK = 80;
   const MIN_DECK = 8;
@@ -11,9 +11,15 @@
   const STREETS = ['플롭', '턴', '리버'];
   const RESUMABLE = ['map', 'battle', 'reward', 'shop', 'rest', 'event'];
   const app = document.getElementById('app');
-  const rnd = Math.random;
 
   let S = null; // 판 전체 상태 (JSON 으로 저장)
+  // 오늘의 도전이면 저장되는 시드 난수(S.rngState)를 한 걸음씩 쓰고, 아니면 Math.random. 게임 규칙의 모든 무작위는 이걸 거친다.
+  const rnd = () => {
+    if (!(S && S.daily)) return Math.random();
+    const r = AD.seedNext(S.rngState);
+    S.rngState = r.state;
+    return r.value;
+  };
   // 저장하지 않는 화면 상태. fx = 이번 클릭에서 일어난 일(fx.js 가 연출), from = 누른 버튼 위치
   // mapSel = 지도에서 눌러 둔 칸(들어가기 전 확인용)
   let ui = { modal: null, swap: false, toast: '', fx: [], from: null, screen: null, mapSel: null, restPick: null };
@@ -25,7 +31,7 @@
   const toast = (msg) => { ui.toast = msg; };
 
   /* ───────── 기록·도감 (판을 넘어 남는 것) ───────── */
-  const EMPTY_PROFILE = { runs: 0, wins: 0, bestFloor: 0, kills: 0, bestHand: -1, bestHit: 0, enemies: [], charms: [] };
+  const EMPTY_PROFILE = { runs: 0, wins: 0, bestFloor: 0, kills: 0, bestHand: -1, bestHit: 0, enemies: [], charms: [], charWins: {}, maxLevel: 0, daily: {} };
   function loadProfile() {
     try { return { ...EMPTY_PROFILE, ...JSON.parse(localStorage.getItem(PROFILE_KEY) || '{}') }; } catch (e) { return { ...EMPTY_PROFILE }; }
   }
@@ -50,24 +56,46 @@
   }
 
   /* ───────── 진행 ───────── */
-  function newRun() {
+  function newRun({ char = 'wanderer', level = 0, daily = null } = {}) {
     V.resetSeen(); // 카드 id 가 c0 부터 다시 쓰이므로 딜 연출 기록도 비운다
     ui.mapSel = null;
     ui.restPick = null;
+    const hero = META.charOf(char);
+    const stack = META.startStack(hero.id, level);
+    // 지도·덱을 만들 때 rnd 가 S.rngState 를 쓰도록 S 를 먼저 세우고 채운다
     S = {
-      v: VERSION, screen: 'map', hp: START_STACK, maxHp: START_STACK, gold: 40, deck: [], charms: [],
-      floor: 1, step: 0, node: null, map: AD.genFloorMap(rnd), path: [], removeCost: 50, dupCost: 60, nextId: 0, seenEvents: [], floorBuff: null, bossId: null,
+      v: VERSION, screen: 'map', hp: stack, maxHp: stack, gold: hero.gold || 40, deck: [], charms: [], char: hero.id, level, daily,
+      rngState: daily ? AD.seedFromDate(daily) : 0,
+      floor: 1, step: 0, node: null, map: null, path: [], removeCost: META.price(50, level), dupCost: META.price(60, level), nextId: 0, seenEvents: [], floorBuff: null, bossId: null,
       stats: { hands: 0, won: 0, best: -1, kills: 0 },
     };
+    S.map = AD.genFloorMap(rnd);
     S.deck = AD.starterDeck(newId, rnd);
+    if (hero.charm) gainCharm(hero.charm);
     note({ runs: P.runs + 1, bestFloor: Math.max(P.bestFloor, 1) });
+  }
+
+  // 오늘의 도전은 날짜별 최고 결과(정복 > 더 깊은 층)를 남긴다. 버튼을 누를 때마다 지금 상태로 갱신한다.
+  function recordDaily() {
+    if (!S || !S.daily) return;
+    const now = { floor: S.floor, won: S.screen === 'win' };
+    const best = META.betterDaily(P.daily[S.daily], now);
+    if (best !== P.daily[S.daily]) note({ daily: { ...P.daily, [S.daily]: best } });
+  }
+
+  function recordWin() {
+    note({
+      wins: P.wins + 1,
+      charWins: { ...P.charWins, [S.char]: (P.charWins[S.char] || 0) + 1 },
+      maxLevel: META.nextMaxLevel(P.maxLevel, S.level),
+    });
   }
 
   const choices = () => AD.choicesAt(S.map, S.path, S.step);
 
   function advance() {
     if (S.node === 'boss') {
-      if (S.floor === AD.FLOORS) { note({ wins: P.wins + 1 }); S.screen = 'win'; return; }
+      if (S.floor === AD.FLOORS) { recordWin(); S.screen = 'win'; return; }
       S.floor++;
       S.step = 0;
       S.map = AD.genFloorMap(rnd);
@@ -94,6 +122,7 @@
   const C = {
     get S() { return S; }, get P() { return P; },
     ui, fx, has, hurt, heal, toast, newId, note, remember, swapCost, gainCharm, cardName,
+    bonusChanges: () => (has('coin') ? 1 : 0) + (S.char === 'ace' ? 1 : 0) + ((S.floorBuff && S.floorBuff.changes) || 0),
     rnd, btn, MIN_DECK, CHANGES, STREETS,
   };
   const { startMatch, vBattle, ACT: battleAct } = window.BATTLE(C);
@@ -122,9 +151,9 @@
     S.shop = {
       cards: [0, 1, 2].map(() => {
         const card = AD.randomCard(S.floor, newId, rnd);
-        return { card, price: card.en ? 55 : 30, sold: false };
+        return { card, price: META.price(card.en ? 55 : 30, S.level), sold: false };
       }),
-      charms: AD.randomCharms(2, S.charms, rnd).map((id) => ({ id, price: 100 + Math.floor(rnd() * 4) * 10, sold: false })),
+      charms: AD.randomCharms(2, S.charms, rnd).map((id) => ({ id, price: META.price(100 + Math.floor(rnd() * 4) * 10, S.level), sold: false })),
     };
     S.screen = 'shop';
   }
@@ -134,11 +163,17 @@
   const ACT = {
     ...battleAct,
     ...eventAct,
-    start() {
-      if (!S && loadSave()) { ui.modal = { type: 'newrun' }; return; } // 진행 중인 도전을 덮어쓰기 전에 묻는다
-      newRun();
+    start() { ui.modal = { type: 'newrun', char: 'wanderer', level: 0 }; }, // 캐릭터·난이도를 고르는 시트(저장이 있으면 덮어쓰기 경고도 여기서)
+    pickChar(id) { if (META.unlocked(META.charOf(id), P)) ui.modal = { ...ui.modal, char: id }; },
+    pickLevel(k) { if (+k <= P.maxLevel) ui.modal = { ...ui.modal, level: +k }; },
+    startNew() {
+      const m = ui.modal;
+      if (!m || !m.char) return;
+      ui.modal = null;
+      newRun({ char: m.char, level: Math.min(m.level, P.maxLevel) });
     },
-    startNew() { ui.modal = null; newRun(); },
+    daily() { ui.modal = { type: 'newrun', daily: true }; },
+    startDaily() { ui.modal = null; newRun({ daily: META.todayKey() }); },
     cont() { S = loadSave(); ui.mapSel = null; },
     mapSel(i) { ui.mapSel = +i; },
     go(i) {
@@ -274,6 +309,7 @@
     ui.from = el.getBoundingClientRect();
     ACT[el.dataset.act](el.dataset.arg);
     if (S && S.hp <= 0 && S.screen !== 'battle') S.screen = 'over'; // 이벤트에서 스택을 다 잃은 경우
+    recordDaily();
     if (S) save();
     saveProfile();
     render();
@@ -293,7 +329,7 @@
     </header>`;
   }
 
-  const vTitle = () => V.title(loadSave(), P);
+  const vTitle = () => V.title(loadSave(), P, META.dailyText(P.daily[META.todayKey()]));
   const vMap = () => V.map(S, choices(), ui.mapSel);
 
   // 덱빌딩 판단용: 아직 안 받은 카드는 넣으면 같은 숫자가 몇 장이 되는지, 받은 카드는 지금 몇 장인지
@@ -401,7 +437,7 @@
       codex: () => sh.codex(P),
       records: () => sh.records(P),
       settings: () => sh.settings(m),
-      newrun: () => { const saved = loadSave(); return saved ? sh.newRunConfirm(saved) : ''; },
+      newrun: () => META.newRunSheet(m, P, loadSave()),
     };
     const make = (S && run[m.type]) || any[m.type];
     const body = make ? make() : '';

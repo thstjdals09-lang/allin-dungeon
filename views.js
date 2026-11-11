@@ -110,6 +110,8 @@
       ['이긴 매치', `${P.kills}번`],
       ['최고 족보', P.bestHand >= 0 ? AD.HANDS[P.bestHand].name : '없음'],
       ['한 판 최대 피해', P.bestHit ? `${P.bestHit}` : '없음'],
+      ['최고 난이도', `${P.maxLevel}`],
+      ...META.CHARACTERS.map((c) => [`${c.name} 정복`, `${(P.charWins || {})[c.id] || 0}번`]),
     ];
     return `<h2 class="h">기록</h2>
       <dl class="stats">${rows.map(([t, d]) => `<div><dt>${t}</dt><dd>${d}</dd></div>`).join('')}</dl>
@@ -125,12 +127,6 @@
     return `<h2 class="h">설정</h2>
       <div class="toggles">${fx ? toggle('효과음', !fx.muted, 'sound') + toggle('연출 빠르게', fx.fast, 'fast') : ''}</div>
       ${wipe}`;
-  }
-
-  function newRunConfirm(saved) {
-    return `<h2 class="h">새로 시작할까요?</h2>
-      <p class="note warn" role="alert">진행 중인 도전(${saved.floor}층)이 사라집니다.</p>
-      <div class="row">${btn('새로 시작', 'startNew', undefined, 'danger')}</div>`;
   }
 
   function menu(m, S) {
@@ -211,7 +207,7 @@
   const TITLE_FAN = [10, 11, 12, 13, 14].map((r, i) => ({ id: `title-${r}`, r, s: 0, en: null, rot: (i - 2) * 10 }));
   const MAIN_MENU = [['howto', '게임 방법', '법'], ['codex', '도감', '도'], ['records', '기록', '기'], ['settings', '설정', '설']];
 
-  function title(saved, P) {
+  function title(saved, P, daily) {
     return `<main class="screen title">
       <div class="drifts" aria-hidden="true">${DRIFTS}</div>
       <p class="eyebrow">헤즈업 홀덤 로그라이크</p>
@@ -220,6 +216,7 @@
       <nav class="mainmenu" aria-label="메인 메뉴">
         ${saved ? btn(`이어 하기<small>지하 ${saved.floor}층 · 스택 ${saved.hp}</small>`, 'cont', undefined, 'primary big') : ''}
         ${btn('새로 시작', 'start', undefined, saved ? 'ghost big' : 'primary big')}
+        ${btn(`오늘의 도전${daily ? `<small>오늘 기록 · ${daily}</small>` : ''}`, 'daily', undefined, 'ghost big')}
         <div class="mm-grid">${MAIN_MENU.map(([k, label, g]) =>
           `<button class="mm" data-act="modal" data-arg="${k}"><span class="glyph" aria-hidden="true">${g}</span>${label}</button>`).join('')}</div>
       </nav>
@@ -296,6 +293,6 @@
     cardName, cardHTML, backHTML, slotHTML, btn, bar, toggle, KIND,
     resetSeen: () => seen.clear(),
     title, map, sheet,
-    sheets: { howto, codex, records, settings, newRunConfirm, menu, charms, enemy, deck },
+    sheets: { howto, codex, records, settings, menu, charms, enemy, deck },
   };
 })();

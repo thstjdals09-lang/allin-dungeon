@@ -108,6 +108,15 @@
   const STEPS = 6; // 층마다 보스 전 칸 수
   const FLOORS = 3;
 
+  // 오늘의 도전용 시드 난수(mulberry32). 상태를 바꾸지 않고 {state, value} 를 돌려준다 — 상태 정수는 저장에 넣는다.
+  function seedNext(state) {
+    const s = (state + 0x6d2b79f5) | 0;
+    let t = Math.imul(s ^ (s >>> 15), 1 | s);
+    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+    return { state: s, value: ((t ^ (t >>> 14)) >>> 0) / 4294967296 };
+  }
+  const seedFromDate = (yyyymmdd) => (Number(yyyymmdd) ^ 0x9e3779b9) | 0;
+
   function shuffle(arr, rng = Math.random) {
     const a = arr.slice();
     for (let i = a.length - 1; i > 0; i--) {
@@ -363,7 +372,7 @@
 
   const api = {
     SUITS, rankLabel, HANDS, ROYAL_BONUS, ANTE, ALLIN_ADD, ENCHANTS, ENCHANT_IDS, CHARMS, ENEMIES, NODES, STEPS, FLOORS, TELLS, RULES,
-    shuffle, pick, starterDeck, tableDeck, eval5, best, isRoyal, describe, strength, tellOf, enemyFolds, enemyAct,
+    seedNext, seedFromDate, shuffle, pick, starterDeck, tableDeck, eval5, best, isRoyal, describe, strength, tellOf, enemyFolds, enemyAct,
     isForcedAllin, ruleNotice, rigCard, visibleBoard, foldDamage, resolveShowdown, pickEnemy, mergeableRanks, mergeCards, randomCard, randomCharms, genFloorMap, choicesAt, migrateSave,
   };
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
