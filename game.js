@@ -108,7 +108,7 @@
 
   function log(msg) { S.battle.log = [msg, ...S.battle.log].slice(0, 6); }
 
-  // 황금 강화는 내가 폴드하지 않은 핸드에서만 — 홀카드만 정하고 폴드해서 상금을 모으는 길을 막는다
+  // 황금 강화는 내가 폴드하지 않은 판에서만 — 핸드만 정하고 폴드해서 상금을 모으는 길을 막는다
   function payGold(b) {
     const gold = 5 * b.hole.filter((c) => c.en === 'gold').length;
     if (gold) { S.gold += gold; log(`황금 강화 · 상금 +${gold}`); }
@@ -295,7 +295,7 @@
     },
     lock() {
       const b = S.battle;
-      if (b.sel.length !== 2) return toast('홀카드는 2장입니다');
+      if (b.sel.length !== 2) return toast('핸드는 2장입니다');
       b.hole = b.hand.filter((c) => b.sel.includes(c.id));
       S.stats.hands++;
       b.hole.filter((c) => c.en === 'eye').forEach(() => reveal(b));
@@ -442,10 +442,10 @@
     return `<main class="screen title">
       <p class="eyebrow">헤즈업 홀덤 로그라이크</p>
       <h1 class="logo">올인<br>던전</h1>
-      <p class="lead">내 덱에서 홀카드 두 장, 보드에 다섯 장. 헤즈업으로 상대 스택을 0으로 만들고, 카드를 모으고 강화해 3층 아래 하우스의 주인까지 내려가세요.</p>
+      <p class="lead">내 덱에서 핸드 두 장, 보드에 다섯 장. 헤즈업으로 상대 스택을 0으로 만들고, 카드를 모으고 강화해 3층 아래 하우스의 주인까지 내려가세요.</p>
       <div class="row">${btn('새로 시작', 'start', undefined, 'primary')}${saved ? btn(`이어 하기 · ${saved.floor}층`, 'cont') : ''}</div>
       <ol class="howto">
-        <li><b>플롭이 깔리면</b> 손패 5장 중 홀카드 2장을 고릅니다. 체인지로 손패를 바꿀 수 있습니다.</li>
+        <li><b>플롭이 깔리면</b> 손패 5장 중 핸드 2장을 고릅니다. 체인지로 손패를 바꿀 수 있습니다.</li>
         <li><b>플롭·턴·리버마다 베팅합니다.</b> 체크하면 다음 카드가 열리고, 벳은 팟 +1, 올인은 팟 +3. 패가 약한 상대는 폴드합니다.</li>
         <li><b>쇼다운에서 진 쪽</b>이 족보 값 × 팟만큼 스택을 잃습니다.</li>
       </ol>
@@ -469,7 +469,7 @@
   function enemyPanel(b) {
     const e = b.enemy;
     const tags = [
-      e.hole === 3 && '홀카드 3장',
+      e.hole === 3 && '카드 3장 받음',
       e.armor && `방어 ${e.armor}`,
       e.heal && `이기면 스택 +${e.heal}`,
       e.mul !== 1 && `족보 값 ×${e.mul}`,
@@ -492,7 +492,7 @@
         <ul class="tags">${tags}</ul>
         <p class="edesc">${e.desc}</p>
       </div>
-      <div class="ehole" aria-label="상대 홀카드">${ecards}</div>
+      <div class="ehole" aria-label="상대 핸드">${ecards}</div>
       ${tell}
     </section>`;
   }
@@ -510,7 +510,7 @@
   function battleActions(b) {
     if (b.phase === 'pick') {
       return btn(`체인지 ${b.sel.length || ''}`.trim(), 'change', undefined, 'ghost', !b.sel.length || b.sel.length > b.changes)
-        + btn('홀카드 확정', 'lock', undefined, 'primary', b.sel.length !== 2);
+        + btn('핸드 확정', 'lock', undefined, 'primary', b.sel.length !== 2);
     }
     if (b.phase === 'bet') {
       const foldCost = has('shoes') ? 0 : AD.foldDamage(b.pot);
@@ -522,7 +522,7 @@
         <button class="chip c3" data-act="allin"><b>올인</b><span>팟 +${allinAdd}</span></button>
       </div>`;
     }
-    const label = S.hp <= 0 ? '결과 보기' : b.enemy.hp <= 0 ? '보상 받기' : '다음 핸드';
+    const label = S.hp <= 0 ? '결과 보기' : b.enemy.hp <= 0 ? '보상 받기' : '다음 판';
     return btn(label, 'next', undefined, 'primary wide');
   }
 
@@ -551,7 +551,7 @@
     </div>`;
 
     let hint = '';
-    if (b.phase === 'pick') hint = '홀카드 2장을 고르세요. 고른 카드는 체인지로 바꿀 수 있습니다.';
+    if (b.phase === 'pick') hint = '핸드 2장을 고르세요. 고른 카드는 체인지로 바꿀 수 있습니다.';
     else if (b.phase === 'bet') {
       hint = ui.swap ? '바꿀 보드 카드를 누르세요.'
         : b.street === 2 ? '리버 베팅. 끝나면 쇼다운입니다.' : `${STREETS[b.street]} 베팅. 체크하면 ${['턴이', '리버가'][b.street]} 열립니다.`;
@@ -653,7 +653,7 @@
       <dl class="stats">
         <div><dt>도달</dt><dd>${S.floor}층</dd></div>
         <div><dt>이긴 매치</dt><dd class="num">${st.kills}</dd></div>
-        <div><dt>쇼다운 승리 / 핸드</dt><dd class="num">${st.won}/${st.hands}</dd></div>
+        <div><dt>쇼다운 승리 / 판</dt><dd class="num">${st.won}/${st.hands}</dd></div>
         <div><dt>최고 족보</dt><dd>${st.best >= 0 ? AD.HANDS[st.best].name : '없음'}</dd></div>
       </dl>
       <div class="actions">${btn('다시 도전', 'start', undefined, 'primary')}${btn('처음 화면', 'again', undefined, 'ghost')}</div>
@@ -661,14 +661,15 @@
   }
 
   const GLOSSARY = [
+    ['핸드', '손패에서 고른 내 카드 2장'],
     ['스택', '내 칩. 0이 되면 버스트(탈락)'],
-    ['팟', '이번 핸드에 걸린 배수. 1에서 시작'],
+    ['팟', '이번 판에 걸린 배수. 1에서 시작'],
     ['체크', '팟을 그대로 두고 다음 카드를 연다'],
     ['벳', '팟 +1. 상대는 콜하거나 폴드한다'],
     ['올인', `팟 +${AD.ALLIN_ADD}. 콜하면 남은 카드를 다 깔고 바로 쇼다운`],
-    ['폴드', `핸드를 포기한다. ${AD.ANTE} × 팟을 잃는다`],
+    ['폴드', `이번 판을 포기한다. ${AD.ANTE} × 팟을 잃는다`],
     ['텔', '상대 표정. 상대마다 거짓말하는 정도가 다르다'],
-    ['체인지', '핸드마다 2번. 손패 1장 교체에 1, 보드 1장 교체에 2'],
+    ['체인지', '판마다 2번. 손패 1장 교체에 1, 보드 1장 교체에 2'],
     ['상금', '매치에서 이기면 받는 돈. 상점에서 쓴다'],
     ['유물', '갖고 있는 동안 계속 효과가 있는 아이템'],
   ];
@@ -679,7 +680,7 @@
     let body = '';
     if (m.type === 'rules') {
       body = `<h2 class="h">규칙</h2>
-        <p class="note">한 핸드: 플롭 → 홀카드 2장 선택 → 플롭 베팅 → 턴 → 턴 베팅 → 리버 → 리버 베팅 → 쇼다운. 진 쪽이 족보 값 × 팟만큼 스택을 잃고, 상대가 폴드하면 상대가 ${AD.ANTE} × 팟을 잃습니다.</p>
+        <p class="note">한 판: 플롭 → 핸드 2장 선택 → 플롭 베팅 → 턴 → 턴 베팅 → 리버 → 리버 베팅 → 쇼다운. 진 쪽이 족보 값 × 팟만큼 스택을 잃고, 상대가 폴드하면 상대가 ${AD.ANTE} × 팟을 잃습니다.</p>
         <h3 class="sub">족보 값</h3>
         <table class="ranks"><tbody>
         ${AD.HANDS.map((h) => `<tr><td>${h.name}</td><td class="num">${h.value}</td></tr>`).reverse().join('')}
@@ -687,7 +688,7 @@
         <p class="note">파이브카드는 이 게임에만 있는 족보입니다. 내 덱 카드가 보드 카드와 겹칠 수 있어서 나옵니다.</p>
         <h3 class="sub">용어</h3>
         <dl class="gloss">${GLOSSARY.map(([t, d]) => `<div><dt>${t}</dt><dd>${d}</dd></div>`).join('')}</dl>
-        <h3 class="sub">카드 강화 · 홀카드로 쓸 때만 효과</h3>
+        <h3 class="sub">카드 강화 · 핸드로 쓸 때만 효과</h3>
         <ul class="enlist">${AD.ENCHANT_IDS.map((k) => `<li><span class="seal seal-${k} inline">${AD.ENCHANTS[k].seal}</span><b>${AD.ENCHANTS[k].name}</b> ${AD.ENCHANTS[k].desc}</li>`).join('')}</ul>`;
     } else {
       const picking = m.purpose;

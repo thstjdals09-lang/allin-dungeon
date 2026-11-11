@@ -24,17 +24,17 @@
   const ALLIN_ADD = 3; // 올인하면 팟 +3 (벳은 +1)
 
   const ENCHANTS = {
-    fire: { name: '불꽃', seal: '불', desc: '홀카드로 쓰고 이기면 족보 값 +4' },
-    steel: { name: '강철', seal: '철', desc: '홀카드로 쓰고 지면 잃는 칩 −4' },
-    gold: { name: '황금', seal: '금', desc: '홀카드로 쓰고 폴드하지 않으면 상금 +5' },
+    fire: { name: '불꽃', seal: '불', desc: '핸드로 쓰고 이기면 족보 값 +4' },
+    steel: { name: '강철', seal: '철', desc: '핸드로 쓰고 지면 잃는 칩 −4' },
+    gold: { name: '황금', seal: '금', desc: '핸드로 쓰고 폴드하지 않으면 상금 +5' },
     wild: { name: '와일드', seal: '와', desc: '어떤 무늬로도 친다' },
-    eye: { name: '투시', seal: '눈', desc: '홀카드로 정하면 상대 홀카드 1장이 보인다' },
-    blood: { name: '흡혈', seal: '피', desc: '홀카드로 쓰고 이기면 스택 +3' },
+    eye: { name: '투시', seal: '눈', desc: '핸드로 정하면 상대 핸드 1장이 보인다' },
+    blood: { name: '흡혈', seal: '피', desc: '핸드로 쓰고 이기면 스택 +3' },
   };
   const ENCHANT_IDS = Object.keys(ENCHANTS);
 
   const CHARMS = {
-    coin: { name: '행운의 동전', desc: '핸드마다 체인지 +1' },
+    coin: { name: '행운의 동전', desc: '판마다 체인지 +1' },
     sleeve: { name: '넓은 소매', desc: '손패를 6장 받는다' },
     ironchip: { name: '무쇠 칩', desc: '질 때 잃는 칩 −2' },
     face: { name: '포커페이스', desc: '벳·올인에 상대가 더 자주 폴드한다' },
@@ -44,7 +44,7 @@
     fry: { name: '잔챙이 사냥', desc: '하이카드·원페어로 이기면 족보 값 +6' },
     tattoo: { name: '꽃무늬 문신', desc: '플러시로 이기면 족보 값 +10' },
     ruler: { name: '곧은 자', desc: '스트레이트로 이기면 족보 값 +10' },
-    mirror: { name: '거울 조각', desc: '핸드마다 상대 홀카드 1장이 처음부터 보인다' },
+    mirror: { name: '거울 조각', desc: '판마다 상대 핸드 1장이 처음부터 보인다' },
     bandage: { name: '붕대', desc: '매치가 끝나면 스택 +6' },
     bribe: { name: '딜러 매수', desc: '보드 체인지가 체인지 1로 된다 (보통 2)' },
     shoes: { name: '도망자 신발', desc: '폴드해도 칩을 잃지 않는다' },
@@ -61,7 +61,7 @@
     { id: 'bear', floor: 1, kind: 'boss', name: '문지기 곰', glyph: '熊', hp: 70, mul: 1.3, tight: 0.6, lie: 0.2, armor: 2, desc: '1층 계단을 지키는 덩치.' },
 
     { id: 'loanshark', floor: 2, kind: 'normal', name: '사채업자', glyph: '債', hp: 34, mul: 1.2, tight: 0.9, lie: 0.2, heal: 4, desc: '이길 때마다 스택을 채운다.' },
-    { id: 'twins', floor: 2, kind: 'normal', name: '쌍둥이 딜러', glyph: '雙', hp: 28, mul: 0.9, tight: 1, lie: 0.2, hole: 3, desc: '홀카드 3장 중에서 고른다.' },
+    { id: 'twins', floor: 2, kind: 'normal', name: '쌍둥이 딜러', glyph: '雙', hp: 28, mul: 0.9, tight: 1, lie: 0.2, hole: 3, desc: '카드 3장을 받아 그중에서 핸드를 고른다.' },
     { id: 'iron', floor: 2, kind: 'normal', name: '무쇠손', glyph: '鐵', hp: 34, mul: 1.2, tight: 0.8, lie: 0.2, armor: 2, desc: '져도 칩을 덜 잃는다.' },
     { id: 'magician', floor: 2, kind: 'elite', name: '카드 마술사', glyph: '幻', hp: 48, mul: 1, tight: 0.8, lie: 0.6, hole: 3, desc: '텔도 카드도 믿을 수 없다.' },
     { id: 'croupier', floor: 2, kind: 'boss', name: '수석 크루피어', glyph: '冠', hp: 80, mul: 1.1, tight: 0.5, lie: 0.3, hole: 3, armor: 1, desc: '2층의 모든 테이블을 돌리는 사람.' },
@@ -104,7 +104,7 @@
     return deck;
   }
 
-  // 상대 홀카드와 보드는 중립 52장에서. tag 는 핸드마다 id 를 새로 만들기 위함
+  // 상대 핸드와 보드는 중립 52장에서. tag 는 판마다 id 를 새로 만들기 위함
   function tableDeck(tag) {
     const d = [];
     for (let s = 0; s < 4; s++) for (let r = 2; r <= 14; r++) d.push({ id: `t${tag}-${s}-${r}`, r, s, en: null });
