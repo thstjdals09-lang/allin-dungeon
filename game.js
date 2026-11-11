@@ -52,6 +52,7 @@
   /* ───────── 진행 ───────── */
   function newRun() {
     V.resetSeen(); // 카드 id 가 c0 부터 다시 쓰이므로 딜 연출 기록도 비운다
+    ui.mapSel = null;
     S = {
       v: VERSION, screen: 'map', hp: START_STACK, maxHp: START_STACK, gold: 40, deck: [], charms: [],
       floor: 1, step: 0, node: null, map: AD.genFloorMap(rnd), path: [], removeCost: 50, nextId: 0,
@@ -311,10 +312,10 @@
       newRun();
     },
     startNew() { ui.modal = null; newRun(); },
-    cont() { S = loadSave(); },
+    cont() { S = loadSave(); ui.mapSel = null; },
     mapSel(i) { ui.mapSel = +i; },
     go(i) {
-      if (!choices().includes(+i)) return;
+      if (S.screen !== 'map' || !choices().includes(+i)) return;
       S.path = [...S.path, +i];
       ui.mapSel = null;
       enterNode(S.map.rows[S.step][+i]);

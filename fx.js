@@ -267,12 +267,15 @@
       A.animate(A.svg.createDrawable(paths), {
         draw: ['0 0', '0 1'], duration: 650, ease: 'inOutQuad',
         delay: (el) => 120 + (+el.getAttribute('data-row') || 0) * 80,
+        // createDrawable 이 남기는 pathLength 를 지워야 CSS 점선 간격이 원래 길이 단위로 돌아온다
+        onComplete: () => paths.forEach((p) => { p.removeAttribute('pathLength'); p.style.strokeDasharray = ''; p.style.strokeDashoffset = ''; }),
       });
     }
     const nodes = $$('.mnode', main);
     if (nodes.length) {
       A.animate(nodes, {
-        scale: [0.3, 1], opacity: [0, 1], duration: 420, ease: 'outBack(1.7)',
+        // 끝 밝기는 CSS 값(지나간 칸은 흐리게)으로 — 연출이 끝날 때 번쩍이지 않게
+        scale: [0.3, 1], opacity: { from: 0 }, duration: 420, ease: 'outBack(1.7)',
         delay: (el) => 80 + (+el.style.getPropertyValue('--row') || 0) * 80,
         onComplete: clean(nodes),
       });
