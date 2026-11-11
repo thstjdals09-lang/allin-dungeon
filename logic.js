@@ -312,7 +312,12 @@
   // 하우스: 리버(다섯 번째 보드 카드)는 쇼다운 전까지 내게 안 보인다
   const visibleBoard = (enemy, board, ended) => (enemy.rule === 'hiddenCard' && !ended ? board.slice(0, 4) : board);
 
-  const foldDamage = (pot, charms = []) => ANTE * pot + (charms.includes('bluffbadge') ? 2 : 0);
+  // 연승 1당 내가 주는 피해 +15%, 최대 +60%
+  const STREAK_STEP = 0.15;
+  const STREAK_MAX = 4;
+  const streakMult = (streak = 0) => Math.round((1 + STREAK_STEP * Math.min(Math.max(streak, 0), STREAK_MAX)) * 100) / 100;
+
+  const foldDamage = (pot, charms = [], streak = 0) => Math.round((ANTE * pot + (charms.includes('bluffbadge') ? 2 : 0)) * streakMult(streak));
 
   // 덱 구성에 따른 족보 값 배수(내 덱 전체 기준). 해당 족보가 아니거나 조건이 안 되면 1
   function deckMult(cat, deck, has) {
@@ -334,7 +339,7 @@
   }
 
   // 쇼다운: 진 쪽이 (족보 값 + 보너스) × 팟 만큼 칩을 잃는다. 방어는 마지막에 뺀다.
-  function resolveShowdown({ pres, eres, hole, pot, charms, enemy, deck = [], allin = false }) {
+  function resolveShowdown({ pres, eres, hole, pot, charms, enemy, deck = [], allin = false, streak = 0 }) {
     const has = (k) => charms.includes(k);
     const count = (en) => hole.filter((c) => c.en === en).length;
     const out = { winner: 0, toEnemy: 0, toPlayer: 0, heal: 0, enemyHeal: 0 };
@@ -347,16 +352,55 @@
       if (has('ruler') && (pres.cat === 4 || pres.cat === 8)) base += 10;
       const raw = Math.round(base * pot * (has('pact') ? 1.3 : 1));
       out.winner = 1;
-      out.toEnemy = Math.max(1, raw - (enemy.armor || 0));
+      out.toEnemy = Math.max(1, Math.round(Math.max(1, raw - (enemy.armor || 0)) * streakMult(streak)));
       out.heal = 3 * count('blood');
     } else if (pres.score < eres.score) {
-      const raw = Math.round(HANDS[eres.cat].value * pot * enemy.mul);
+      const raw = Math.round((HANDS[eres.cat].value + (enemy.valueBonus || 0)) * pot * enemy.mul);
       const block = 4 * count('steel') + (has('ironchip') ? 2 : 0);
       out.winner = -1;
       out.toPlayer = Math.max(0, raw + (has('junkie') && allin ? 4 : 0) - block);
       out.enemyHeal = enemy.heal || 0;
     }
     return out;
+  }
+
+  // 상대 수식어: 상대를 만들 때 굴려 붙인다. hp 는 난이도를 얹은 뒤의 값에 곱한다.
+  const AFFIXES = {
+    sharp: { name: '날카로운', icon: 'swords', desc: '이기면 족보 값 +2' },
+    sturdy: { name: '단단한', icon: 'shield-plus', desc: '방어 +2' },
+    grit: { name: '투지', icon: 'heart-pulse', desc: '스택 +25%' },
+    bluster: { name: '허세', icon: 'drama', desc: '약해도 벳·레이즈를 더 자주 한다' },
+    cool: { name: '냉정', icon: 'glasses', desc: '텔이 없다' },
+    rich: { name: '부자', icon: 'gem', desc: '이기면 상금 +50%' },
+  };
+  const AFFIX_IDS = Object.keys(AFFIXES);
+
+  // 붙는 수: 일반 1층 40%로 1개 · 2층 1개 · 3층 1~2개, 하이롤러 1~2개, 보스 0개. 난이도 2 이상이면 일반·하이롤러 +1(최대 2)
+  function affixCount(floor, kind, level, rng = Math.random) {
+    if (kind === 'boss') return 0;
+    const n = kind === 'elite' || floor >= 3 ? 1 + (rng() < 0.5 ? 1 : 0) : floor === 2 ? 1 : (rng() < 0.4 ? 1 : 0);
+    return level >= 2 ? Math.min(2, n + 1) : n;
+  }
+
+  // 같은 수식어는 한 번만, 이미 텔이 없는 상대에겐 냉정을 안 붙인다
+  function rollAffixes(enemy, level, rng = Math.random) {
+    const pool = AFFIX_IDS.filter((id) => !(id === 'cool' && enemy.poker));
+    return shuffle(pool, rng).slice(0, affixCount(enemy.floor, enemy.kind, level, rng));
+  }
+
+  function applyAffixes(enemy, ids) {
+    const has = (id) => ids.includes(id);
+    const hp = has('grit') ? Math.round(enemy.hp * 1.25) : enemy.hp;
+    return {
+      ...enemy,
+      affixes: [...ids],
+      hp,
+      armor: (enemy.armor || 0) + (has('sturdy') ? 2 : 0),
+      bluff: Math.round(((enemy.bluff === undefined ? 0.1 : enemy.bluff) + (has('bluster') ? 0.2 : 0)) * 100) / 100,
+      poker: !!enemy.poker || has('cool'),
+      valueBonus: (enemy.valueBonus || 0) + (has('sharp') ? 2 : 0),
+      goldMul: has('rich') ? 1.5 : enemy.goldMul || 1,
+    };
   }
 
   function pickEnemy(floor, kind, rng = Math.random, id = null) {
@@ -428,7 +472,7 @@
   const api = {
     SUITS, rankLabel, HANDS, ROYAL_BONUS, ANTE, ALLIN_ADD, ENCHANTS, ENCHANT_IDS, CHARMS, TRICKS, TRICK_IDS, MAX_TRICKS, STARE_BOOST, trickRoom, rewardTrick, shopTricks, canUseTrick, ENEMIES, NODES, STEPS, FLOORS, TELLS, RULES,
     seedNext, seedFromDate, shuffle, pick, starterDeck, tableDeck, eval5, best, isRoyal, describe, strength, tellOf, enemyFolds, enemyAct,
-    isForcedAllin, ruleNotice, rigCard, equityAtFlop, reviewVerdict, visibleBoard, foldDamage, resolveShowdown, pickEnemy, mergeableRanks, mergeCards, randomCard, randomCharms, genFloorMap, choicesAt, migrateSave,
+    isForcedAllin, ruleNotice, rigCard, equityAtFlop, reviewVerdict, visibleBoard, foldDamage, streakMult, STREAK_STEP, STREAK_MAX, AFFIXES, AFFIX_IDS, affixCount, rollAffixes, applyAffixes, resolveShowdown, pickEnemy, mergeableRanks, mergeCards, randomCard, randomCharms, genFloorMap, choicesAt, migrateSave,
   };
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
   else root.AD = api;

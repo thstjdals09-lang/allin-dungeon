@@ -8,6 +8,7 @@
   // 강화 토큰: 둥근 색 토큰 + 흰 아이콘. 이름·설명은 data-tip 말풍선
   const sealHTML = (k, cls = '') => `<span class="seal seal-${k}${cls}" data-tip="${AD.ENCHANTS[k].name} · ${AD.ENCHANTS[k].desc}">${icon(AD.ENCHANTS[k].icon)}</span>`;
   // 트릭 토큰: 둥근 아이콘. 이름·설명은 data-tip 말풍선
+  const affixToken = (k) => `<span class="tricktoken inline" data-tip="${AD.AFFIXES[k].name} · ${AD.AFFIXES[k].desc}">${icon(AD.AFFIXES[k].icon)}</span>`;
   const trickToken = (k, cls = '') => `<span class="tricktoken${cls}" data-tip="${AD.TRICKS[k].name} · ${AD.TRICKS[k].desc}">${icon(AD.TRICKS[k].icon)}</span>`;
   const cardName = (c) => `${AD.SUITS[c.s]}${AD.rankLabel(c.r)}${c.en ? ` (${AD.ENCHANTS[c.en].name})` : ''}`;
 
@@ -91,6 +92,7 @@
       ${enchantList()}`;
   }
 
+  const affixList = (ids = AD.AFFIX_IDS) => `<ul class="enlist">${ids.map((k) => `<li>${affixToken(k)}<b>${AD.AFFIXES[k].name}</b> ${AD.AFFIXES[k].desc}</li>`).join('')}</ul>`;
   const trickList = () => `<ul class="enlist">${AD.TRICK_IDS.map((k) => `<li>${trickToken(k, ' inline')}<b>${AD.TRICKS[k].name}</b> ${AD.TRICKS[k].desc}</li>`).join('')}</ul>`;
 
   // 도감: 만난 상대와 얻은 유물만 보이고, 나머지는 ???
@@ -108,7 +110,8 @@
       <h3 class="sub">상대 · ${met.size}/${AD.ENEMIES.length}</h3><ul class="codex">${enemies}</ul>
       <h3 class="sub">유물 · ${got.size}/${charmIds.length}</h3><ul class="plist">${charms}</ul>
       <h3 class="sub">트릭 · ${AD.TRICK_IDS.length}종</h3>${trickList()}
-      <h3 class="sub">카드 강화 · ${AD.ENCHANT_IDS.length}종</h3>${enchantList()}`;
+      <h3 class="sub">카드 강화 · ${AD.ENCHANT_IDS.length}종</h3>${enchantList()}
+      <h3 class="sub">수식어 · ${AD.AFFIX_IDS.length}종</h3>${affixList()}`;
   }
 
   function records(P) {
@@ -177,7 +180,7 @@
       e.hole === 3 && ['카드 3장', '카드 3장을 받아 그중 좋은 쪽을 쓴다'],
     ].filter(Boolean);
     return `<div class="who-sheet"><span class="medal" aria-hidden="true">${icon(e.icon)}</span><div><h2 class="h">${e.name}</h2><p class="note">${e.desc}</p></div></div>
-      ${gloss(traits)}`;
+      ${gloss(traits)}${(e.affixes || []).length ? `<h3 class="sub">수식어</h3>${affixList(e.affixes)}` : ''}`;
   }
 
   // 강화·제거할 카드 고르기: 누르면 고르기만(다시 누르면 취소), 아래 확인 버튼에서 적용, 닫기로 그만두기

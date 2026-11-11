@@ -272,6 +272,54 @@ st2.forEach((x) => assert.ok(AD.TRICK_IDS.includes(x.id) && x.price >= 30 && x.p
 const seed = (n) => { let x = AD.seedNext(n); return () => { x = AD.seedNext(x.state); return x.value; }; };
 assert.deepStrictEqual(AD.shopTricks(seed(7)), AD.shopTricks(seed(7)), '같은 시드는 같은 상점 트릭');
 
+// 상대 수식어
+const base = AD.pickEnemy(2, 'normal', Math.random, 'iron');
+const baseHp = base.hp;
+const one = (id) => AD.applyAffixes(base, [id]);
+assert.strictEqual(one('sharp').valueBonus, 2);
+assert.strictEqual(one('sturdy').armor, base.armor + 2);
+assert.strictEqual(one('grit').hp, Math.round(baseHp * 1.25));
+assert.strictEqual(one('bluster').bluff, Math.round((base.bluff + 0.2) * 100) / 100);
+assert.strictEqual(one('cool').poker, true);
+assert.strictEqual(one('rich').goldMul, 1.5);
+assert.strictEqual(AD.applyAffixes(base, []).hp, baseHp, '수식어 없으면 그대로');
+assert.strictEqual(base.valueBonus, undefined, '원본 상대는 안 바뀐다');
+assert.deepStrictEqual(AD.applyAffixes(base, ['sharp', 'rich']).affixes, ['sharp', 'rich']);
+// 날카로운: 상대가 이길 때 족보 값 +2 (원페어 값 + 2) × 팟 × 배수
+const hi = { score: 2, cat: 1 }, lo = { score: 1, cat: 0 };
+const loss = (en) => AD.resolveShowdown({ pres: lo, eres: hi, hole: [], pot: 2, charms: [], enemy: en }).toPlayer;
+assert.strictEqual(loss(one('sharp')), Math.round((AD.HANDS[1].value + 2) * 2 * base.mul));
+assert.strictEqual(loss(base), Math.round(AD.HANDS[1].value * 2 * base.mul));
+// 수 굴리기: 고정 rng(0.1 → 40% 안, 0.9 → 밖)
+const fixed = (v) => () => v;
+const cnt = (floor, kind, level, v) => AD.affixCount(floor, kind, level, fixed(v));
+assert.deepStrictEqual([cnt(1, 'normal', 0, 0.1), cnt(1, 'normal', 0, 0.9)], [1, 0]);
+assert.deepStrictEqual([cnt(2, 'normal', 0, 0.1), cnt(2, 'normal', 0, 0.9)], [1, 1]);
+assert.deepStrictEqual([cnt(3, 'normal', 0, 0.1), cnt(3, 'normal', 0, 0.9)], [2, 1]);
+assert.deepStrictEqual([cnt(1, 'elite', 0, 0.1), cnt(1, 'elite', 0, 0.9)], [2, 1]);
+assert.deepStrictEqual([cnt(1, 'boss', 0, 0.1), cnt(3, 'boss', 5, 0.1)], [0, 0]);
+assert.deepStrictEqual([cnt(1, 'normal', 2, 0.9), cnt(2, 'normal', 2, 0.9), cnt(3, 'normal', 5, 0.1), cnt(1, 'elite', 2, 0.1)], [1, 2, 2, 2], '난이도 2 이상 +1, 최대 2');
+const lcg = (seed) => { let x = seed; return () => { x = (x * 1664525 + 1013904223) % 4294967296; return x / 4294967296; }; };
+for (let k = 0; k < 300; k++) {
+  const r = lcg(k + 1);
+  for (const e of AD.ENEMIES) {
+    const ids = AD.rollAffixes(e, k % 6, r);
+    assert.strictEqual(new Set(ids).size, ids.length, '같은 수식어 중복 없음');
+    ids.forEach((id) => assert.ok(AD.AFFIX_IDS.includes(id)));
+    if (e.poker) assert.ok(!ids.includes('cool'), '이미 텔 없는 상대에 냉정 없음');
+    if (e.kind === 'boss') assert.strictEqual(ids.length, 0);
+  }
+}
+assert.deepStrictEqual(AD.rollAffixes(base, 1, lcg(5)), AD.rollAffixes(base, 1, lcg(5)), '같은 시드는 같은 수식어');
+// 연승 배율: 1당 +15%, 최대 +60%
+assert.deepStrictEqual([0, 1, 2, 4, 7].map(AD.streakMult), [1, 1.15, 1.3, 1.6, 1.6]);
+const win = (streak, en = base) => AD.resolveShowdown({ pres: hi, eres: lo, hole: [], pot: 2, charms: [], enemy: en, streak }).toEnemy;
+const w0 = win(0);
+assert.strictEqual(win(4), Math.round(w0 * 1.6));
+assert.strictEqual(win(7), win(4));
+assert.strictEqual(AD.foldDamage(3, [], 4), Math.round(AD.ANTE * 3 * 1.6));
+assert.strictEqual(AD.foldDamage(3, ['bluffbadge']), AD.ANTE * 3 + 2, '연승 0이면 그대로');
+
 console.log('logic 테스트 통과');
 
 if (process.argv.includes('--sim')) sim();
@@ -279,6 +327,7 @@ if (process.argv.includes('--sim')) sim();
 // 단순한 플레이어(체인지·유물 안 씀, 거리마다 패 세기로 벳)로 상대별 잃는 스택을 잰다
 function sim() {
   const N = 3000;
+  const LEVEL = +(process.argv.find((a) => a.startsWith('--level=')) || '--level=0').slice(8);
   let n = 0;
   const newId = () => 'd' + n++;
   const deckFor = (floor) => {
@@ -287,22 +336,28 @@ function sim() {
     return deck;
   };
   const rows = [];
+  const means = [];
   for (const e of AD.ENEMIES) {
-    const enemy = { hole: 2, armor: 0, heal: 0, bluff: 0.1, ...e };
+    const plain = { hole: 2, armor: 0, heal: 0, bluff: 0.1, ...e };
     let taken = [], hands = 0;
     for (let k = 0; k < N; k++) {
+      const enemy = AD.applyAffixes(plain, AD.rollAffixes(plain, LEVEL)); // 매판 수식어를 새로 굴린다
       const res = fight(enemy, deckFor(e.floor));
       taken.push(res.taken); hands += res.hands;
     }
     taken.sort((a, b) => a - b);
     const mean = taken.reduce((a, b) => a + b, 0) / N;
+    means.push({ e, mean });
     rows.push(`${e.floor}층 ${e.kind.padEnd(6)} ${e.name.padEnd(8)} 평균 피해 ${mean.toFixed(1).padStart(5)}  상위10% ${String(taken[Math.floor(N * 0.9)]).padStart(3)}  핸드 ${(hands / N).toFixed(1)}`);
   }
+  const avg = (floor, kind) => { const m = means.filter((x) => x.e.floor === floor && x.e.kind === kind); return m.reduce((a, x) => a + x.mean, 0) / m.length; };
+  console.log('난이도 ' + LEVEL + ' · 수식어·연승 반영 평균 피해');
+  console.log('1층 일반 ' + avg(1, 'normal').toFixed(1) + ' · 1층 보스 ' + avg(1, 'boss').toFixed(1) + ' · 2층 보스 ' + avg(2, 'boss').toFixed(1) + ' · 3층 보스 ' + avg(3, 'boss').toFixed(1) + ' · 하이롤러 ' + [1, 2, 3].map((f) => avg(f, 'elite').toFixed(1)).join('/'));
   console.log(rows.join('\n'));
 }
 
 function fight(enemy, deck) {
-  let ehp = enemy.hp, taken = 0, hands = 0, draw = AD.shuffle(deck), discard = [];
+  let ehp = enemy.hp, taken = 0, hands = 0, streak = 0, draw = AD.shuffle(deck), discard = [];
   while (ehp > 0 && hands < 80) {
     if (draw.length < 5) { draw = AD.shuffle([...draw, ...discard]); discard = []; }
     const hand = draw.slice(0, 5); draw = draw.slice(5); discard.push(...hand);
@@ -347,11 +402,12 @@ function fight(enemy, deck) {
       else if (allin) break;
       else if (act === 'raise') { pot++; respond(me, v, pot - 1); }
     }
-    if (folded < 0) { taken += AD.foldDamage(pot); continue; }
-    if (folded > 0) { ehp -= AD.foldDamage(pot); continue; }
-    const out = AD.resolveShowdown({ pres: AD.best([...hole, ...full]), eres: AD.best([...ehole, ...full]), hole, pot, charms: [], enemy });
+    if (folded < 0) { taken += AD.foldDamage(pot); streak = 0; continue; }
+    if (folded > 0) { ehp -= AD.foldDamage(pot, [], streak); streak++; continue; }
+    const out = AD.resolveShowdown({ pres: AD.best([...hole, ...full]), eres: AD.best([...ehole, ...full]), hole, pot, charms: [], enemy, streak });
     ehp = Math.min(enemy.hp, ehp - out.toEnemy + out.enemyHeal);
     taken += out.toPlayer;
+    if (out.winner) streak = out.winner > 0 ? streak + 1 : 0;
   }
   return { taken, hands };
 }

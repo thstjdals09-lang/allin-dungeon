@@ -398,6 +398,14 @@
       const medal = $('.enemy .medal');
       return HANDLERS.chip(ev, at, { ...opt, from: medal ? medal.getBoundingClientRect() : null });
     },
+    // 연승이 오르면 칩이 톡 튄다(선언이 끝난 뒤)
+    streak(ev, at) {
+      later(at, () => {
+        const el = $('.streak');
+        if (on() && el) A.animate(el, { scale: [1.8, 1], duration: 460, ease: EASE, onComplete: clean([el]) });
+      });
+      return at;
+    },
     cutin(ev, at) { later(at, () => cutin(ev.text, 'gold')); return at + 760; },
     show(ev, at) {
       let t = flipIn($$('.ehole .card.deal'), at) + 80;

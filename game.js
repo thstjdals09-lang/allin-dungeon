@@ -2,8 +2,8 @@
    배경 그림은 scenes.js(SCENES), 연출은 fx.js(FX). */
 (function () {
   'use strict';
-  const VERSION = 9; // v9: 트릭(S.tricks·보상 trick·상점 tricks)이 생겼다. v8: 캐릭터(char)·난이도(level)·오늘의 도전(daily·rngState)이 생겼다. v7: 이벤트 본 기록(seenEvents)·층 버프(floorBuff)·알아낸 보스(bossId)가 생겼다. v6: v6: 카드 복제 비용(dupCost)이 생겼다. v5: v5: 상대 고유 규칙(enemy.rule)·강제 올인 facing 이 생겼다. v4: 상대 벳·레이즈(battle.facing)가 생겨 v3 전투 저장과 다르다. v3: 층 지도가 갈림길(map·path)로 바뀌어 v2 저장과 형식이 다르다
-  const SAVE_KEY = 'allin-dungeon-v9';
+  const VERSION = 10; // v10: 상대 수식어(enemy.affixes·valueBonus·goldMul)·연승(battle.streak)이 생겼다. v9: 트릭(S.tricks·보상 trick·상점 tricks)이 생겼다. v8: 캐릭터(char)·난이도(level)·오늘의 도전(daily·rngState)이 생겼다. v7: 이벤트 본 기록(seenEvents)·층 버프(floorBuff)·알아낸 보스(bossId)가 생겼다. v6: v6: 카드 복제 비용(dupCost)이 생겼다. v5: v5: 상대 고유 규칙(enemy.rule)·강제 올인 facing 이 생겼다. v4: 상대 벳·레이즈(battle.facing)가 생겨 v3 전투 저장과 다르다. v3: 층 지도가 갈림길(map·path)로 바뀌어 v2 저장과 형식이 다르다
+  const SAVE_KEY = 'allin-dungeon-v10';
   const PROFILE_KEY = 'allin-dungeon-profile';
   const START_STACK = 80;
   const MIN_DECK = 8;

@@ -9,7 +9,8 @@ window.BATTLE = function (C) {
   function startMatch(kind) {
     const e = AD.pickEnemy(C.S.floor, kind === 'fight' ? 'normal' : kind, rnd, kind === 'boss' ? C.S.bossId : null); // 정보원이 알려 준 보스를 그대로
     const scaled = META.scaleEnemy(e, C.S.level || 0);
-    C.S.battle = { enemy: { ...scaled, maxHp: scaled.hp }, draw: AD.shuffle(C.S.deck, rnd), discard: [], hand: [], handNo: 0, log: [] };
+    const armed = AD.applyAffixes(scaled, AD.rollAffixes(scaled, C.S.level || 0, rnd));
+    C.S.battle = { enemy: { ...armed, maxHp: armed.hp }, streak: 0, draw: AD.shuffle(C.S.deck, rnd), discard: [], hand: [], handNo: 0, log: [] };
     remember('enemies', e.id);
     C.S.screen = 'battle';
     startHand();
@@ -96,6 +97,12 @@ window.BATTLE = function (C) {
     return { ...result, eq, verdict };
   }
 
+  // 연승: 오를 때만 연출 이벤트를 쌓는다
+  function setStreak(b, n) {
+    if (n > b.streak) fx({ t: 'streak', n });
+    b.streak = n;
+  }
+
   function endHand(b, result, msg) {
     b.result = review(b, result);
     b.facing = null;
@@ -134,13 +141,14 @@ window.BATTLE = function (C) {
     const where = `${STREETS[b.street]}${b.facing ? ` 상대 ${b.facing.kind === 'bet' ? '벳' : '레이즈'} →` : ''} ${allin ? '올인' : word}`;
     const act = AD.enemyAct(b.enemy, b.str, allin ? 'allin' : canReraise ? 'bet' : 'raise', rnd, (has('face') ? 1.25 : 1) * (b.stare ? AD.STARE_BOOST : 1));
     if (act === 'fold') {
-      const d = AD.foldDamage(b.pot, C.S.charms);
+      const d = AD.foldDamage(b.pot, C.S.charms, b.streak);
       payGold(b);
       if (has('bluffbadge')) { C.S.gold += 4; log('허풍선이 배지 · 상금 +4'); }
       b.enemy.hp -= d;
       b.shown = b.shown.map(() => true);
       fx({ t: 'efold', d, kill: b.enemy.hp <= 0, node: C.S.node, floor: C.S.floor });
       endHand(b, { type: 'efold', toEnemy: d }, `${where} → 상대 폴드 · 상대 스택 −${d}`);
+      setStreak(b, b.streak + 1);
       return;
     }
     if (act === 'raise') return enemyRaised(b, 'raise', b.pot, `${where} → 상대 레이즈 · 팟 ×${b.pot + 1}`);
@@ -188,7 +196,7 @@ window.BATTLE = function (C) {
   function showdown(b) {
     const pres = AD.best([...b.hole, ...b.board]);
     const eres = AD.best([...b.ehole, ...b.board]);
-    const out = AD.resolveShowdown({ pres, eres, hole: b.hole, pot: b.pot, charms: C.S.charms, enemy: b.enemy, deck: C.S.deck, allin: b.allin });
+    const out = AD.resolveShowdown({ pres, eres, hole: b.hole, pot: b.pot, charms: C.S.charms, enemy: b.enemy, deck: C.S.deck, allin: b.allin, streak: b.streak });
     payGold(b);
     b.shown = b.shown.map(() => true);
     b.enemy.hp = Math.min(b.enemy.maxHp, b.enemy.hp - out.toEnemy + out.enemyHeal);
@@ -208,11 +216,13 @@ window.BATTLE = function (C) {
     });
     const verdict = out.winner > 0 ? `상대 스택 −${out.toEnemy}` : out.winner < 0 ? `스택 −${out.toPlayer}` : '스플릿';
     endHand(b, result, `쇼다운 ${result.pdesc} vs ${result.edesc} → ${verdict}`);
+    if (out.winner) setStreak(b, out.winner > 0 ? b.streak + 1 : 0);
   }
 
   function winMatch() {
     const kind = C.S.node;
-    const gold = { fight: 16, elite: 32, boss: 55 }[kind] + Math.floor(rnd() * 9) + (has('tooth') ? 15 : 0);
+    const base = { fight: 16, elite: 32, boss: 55 }[kind] + Math.floor(rnd() * 9) + (has('tooth') ? 15 : 0);
+    const gold = Math.round(base * (C.S.battle.enemy.goldMul || 1));
     C.S.gold += gold;
     if (has('bandage')) heal(6);
     if (kind === 'boss') heal(Math.round(C.S.maxHp * 0.4));
@@ -233,6 +243,7 @@ window.BATTLE = function (C) {
       e.mul !== 1 && `족보 값 ×${e.mul}`,
       !e.tight && '폴드 안 함',
     ].filter(Boolean).map((t) => `<li>${t}</li>`).join('');
+    const marks = (e.affixes || []).map((id) => `<li class="affix" data-tip="${AD.AFFIXES[id].name} · ${AD.AFFIXES[id].desc}" aria-label="${AD.AFFIXES[id].name}: ${AD.AFFIXES[id].desc}">${V.icon(AD.AFFIXES[id].icon)}</li>`).join('');
     const kind = { normal: '', elite: '<em class="kind">하이롤러</em>', boss: '<em class="kind boss">보스</em>' }[e.kind];
     let tell = '';
     if (b.phase === 'pick' || b.phase === 'bet') {
@@ -247,7 +258,7 @@ window.BATTLE = function (C) {
       <div class="who">
         <h2>${e.name} ${kind}</h2>
         <div class="hpline">${bar(e.hp, e.maxHp, 'ehp', 'enemy')}<b class="num">${Math.max(0, e.hp)}<small>/${e.maxHp}</small></b></div>
-        <ul class="tags">${tags}</ul>
+        <ul class="tags">${marks}${tags}</ul>
         <p class="edesc">${e.desc}</p>
       </div>
       <div class="ehole" aria-label="상대 핸드">${ecards}</div>
@@ -309,7 +320,7 @@ window.BATTLE = function (C) {
 
   // 지금 패 그대로 이기면 상대가 잃을 칩 — 규칙 엔진의 계산을 그대로 쓴다
   function winIfNow(b, hole, pres) {
-    return AD.resolveShowdown({ pres, eres: { score: -1, cat: 0 }, hole, pot: b.pot, charms: C.S.charms, enemy: b.enemy, deck: C.S.deck, allin: b.allin || (!!b.facing && b.facing.kind === 'allin') }).toEnemy;
+    return AD.resolveShowdown({ pres, eres: { score: -1, cat: 0 }, hole, pot: b.pot, charms: C.S.charms, enemy: b.enemy, deck: C.S.deck, allin: b.allin || (!!b.facing && b.facing.kind === 'allin'), streak: b.streak }).toEnemy;
   }
 
   // 엿본 카드가 아직 다음 차례인지(보드 체인지로 바뀌었으면 아님)
@@ -329,6 +340,8 @@ window.BATTLE = function (C) {
     const use = sel === null ? '사용' : `사용 · ${AD.TRICKS[owned[sel]].name}`;
     return `<div class="tricks" aria-label="트릭">${tokens}<span class="usewrap"${why ? ` data-tip="${why}"` : ''}>${btn(use, 'trickUse', undefined, 'primary sm', !!why)}</span></div>`;
   }
+
+  const streakChip = (n) => (n < 1 ? '' : `<span class="streak" data-tip="연승 ${n} · 주는 피해 +${Math.round((AD.streakMult(n) - 1) * 100)}%" aria-label="연승 ${n}">${V.icon('flame')}×${n}</span>`);
 
   function vBattle() {
     const b = C.S.battle;
@@ -373,7 +386,7 @@ window.BATTLE = function (C) {
       ${enemyPanel(b)}
       <section class="board${ui.swap ? ' swapping' : ''}" aria-label="보드">
         ${b.facing && b.phase === 'bet' ? `<p class="facing" role="status">상대 ${{ bet: '벳', raise: '레이즈', allin: '올인' }[b.facing.kind]} · 팟 ×${b.pot}</p>` : ''}
-        <div class="potline">${stepper(b)}<b class="num pot">팟 ×${b.pot}</b></div>
+        <div class="potline">${stepper(b)}<span class="potr">${streakChip(b.streak)}<b class="num pot">팟 ×${b.pot}</b></span></div>
         <div class="cards">${board}</div>
       </section>
       <div class="bottom">
@@ -440,6 +453,7 @@ window.BATTLE = function (C) {
       hurt(d);
       fx({ t: 'pfold', d, bust: C.S.hp <= 0 });
       endHand(b, { type: 'pfold', toPlayer: d }, `${STREETS[b.street]} 폴드 · 스택 −${d}`);
+      b.streak = 0;
     },
     swapmode() {
       if (C.S.battle.changes < swapCost()) return toast(`보드 체인지는 체인지 ${swapCost()}이 필요합니다`);
