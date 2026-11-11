@@ -12,10 +12,13 @@
   const rnd = Math.random;
 
   let S = null; // 판 전체 상태 (JSON 으로 저장)
-  let ui = { modal: null, swap: false, toast: '' }; // 저장하지 않는 화면 상태
+  // 저장하지 않는 화면 상태. fx = 이번 클릭에서 일어난 일(fx.js 가 연출), from = 누른 버튼 위치
+  let ui = { modal: null, swap: false, toast: '', fx: [], from: null, screen: null };
   const seen = new Set(); // 이미 그린 카드 id — 딜 애니메이션을 한 번만
+  const NODE_GLYPH = { fight: '卓', elite: '豪', shop: '市', rest: '休', event: '謎', boss: '王' };
 
   const has = (k) => S.charms.includes(k);
+  const fx = (ev) => { ui.fx = [...ui.fx, ev]; };
   const newId = () => 'c' + S.nextId++;
   const cardName = (c) => `${AD.SUITS[c.s]}${AD.rankLabel(c.r)}${c.en ? ` (${AD.ENCHANTS[c.en].name})` : ''}`;
   const toast = (msg) => { ui.toast = msg; };
@@ -155,16 +158,19 @@
 
   function raise(b, add, allin) {
     b.pot += add;
+    fx({ t: 'chip', allin });
     if (AD.enemyFolds(b.enemy, b.str, allin, has('face') ? 1.25 : 1, rnd)) {
       const d = AD.foldDamage(b.pot);
       payGold(b);
       b.enemy.hp -= d;
       b.shown = b.shown.map(() => true);
+      fx({ t: 'efold', d, kill: b.enemy.hp <= 0 });
       endHand(b, { type: 'efold', toEnemy: d }, `${STREETS[b.street]} ${allin ? '올인' : '벳'} → 상대 폴드 · 상대 스택 −${d}`);
       return;
     }
     log(`${STREETS[b.street]} ${allin ? '올인' : '벳'} → 상대 콜 · 팟 ×${b.pot}`);
     if (!allin) return nextStreet(b);
+    fx({ t: 'cutin', text: '올인 콜' });
     const need = 5 - b.board.length; // 올인이면 남은 카드를 다 깔고 바로 쇼다운
     b.board = [...b.board, ...b.table.slice(0, need)];
     b.table = b.table.slice(need);
@@ -187,6 +193,10 @@
       type: 'show', ...out, pdesc: AD.describe(pres), edesc: AD.describe(eres),
       used: pres.cards.map((c) => c.id), eused: eres.cards.map((c) => c.id),
     };
+    fx({
+      t: 'show', winner: out.winner, toEnemy: out.toEnemy, toPlayer: out.toPlayer, heal: out.heal, enemyHeal: out.enemyHeal,
+      cat: pres.cat, name: AD.isRoyal(pres) ? '로열 플러시' : AD.HANDS[pres.cat].name, kill: b.enemy.hp <= 0, bust: S.hp <= 0,
+    });
     const verdict = out.winner > 0 ? `상대 스택 −${out.toEnemy}` : out.winner < 0 ? `스택 −${out.toPlayer}` : '스플릿';
     endHand(b, result, `쇼다운 ${result.pdesc} vs ${result.edesc} → ${verdict}`);
   }
@@ -300,14 +310,16 @@
       S.stats.hands++;
       b.hole.filter((c) => c.en === 'eye').forEach(() => reveal(b));
       b.phase = 'bet';
+      fx({ t: 'lock' });
     },
-    check() { const b = S.battle; log(`${STREETS[b.street]} 체크`); nextStreet(b); },
+    check() { const b = S.battle; log(`${STREETS[b.street]} 체크`); fx({ t: 'check' }); nextStreet(b); },
     bet() { raise(S.battle, 1, false); },
     allin() { raise(S.battle, AD.ALLIN_ADD + (has('ring') ? 1 : 0), true); },
     fold() {
       const b = S.battle;
       const d = has('shoes') ? 0 : AD.foldDamage(b.pot);
       hurt(d);
+      fx({ t: 'pfold', d, bust: S.hp <= 0 });
       endHand(b, { type: 'pfold', toPlayer: d }, `${STREETS[b.street]} 폴드 · 스택 −${d}`);
     },
     swapmode() {
@@ -333,12 +345,14 @@
       if (r.cardDone) return;
       S.deck = [...S.deck, r.cards[+i]];
       S.reward = { ...r, cardDone: true, took: r.cards[+i].id };
+      fx({ t: 'coin' });
     },
     takeCharm(id) {
       const r = S.reward;
       if (r.charmDone) return;
       gainCharm(id);
       S.reward = { ...r, charmDone: true, tookCharm: id };
+      fx({ t: 'coin' });
     },
     leave() { advance(); },
     buyCard(i) {
@@ -346,6 +360,7 @@
       if (item.sold) return;
       if (S.gold < item.price) return toast('상금이 모자랍니다');
       S.gold -= item.price;
+      fx({ t: 'coin' });
       S.deck = [...S.deck, item.card];
       S.shop = { ...S.shop, cards: S.shop.cards.map((x, k) => (k === +i ? { ...x, sold: true } : x)) };
     },
@@ -354,6 +369,7 @@
       if (item.sold) return;
       if (S.gold < item.price) return toast('상금이 모자랍니다');
       S.gold -= item.price;
+      fx({ t: 'coin' });
       gainCharm(item.id);
       S.shop = { ...S.shop, charms: S.shop.charms.map((x, k) => (k === +i ? { ...x, sold: true } : x)) };
     },
@@ -394,12 +410,14 @@
     close() { ui.modal = null; },
     charm(id) { toast(`${AD.CHARMS[id].name} · ${AD.CHARMS[id].desc}`); },
     again() { S = null; },
+    sound() { if (window.FX) FX.toggleSound(); },
   };
 
   app.addEventListener('click', (ev) => {
     const el = ev.target.closest('[data-act]');
     if (!el || el.disabled) return;
     ui.toast = '';
+    ui.from = el.getBoundingClientRect();
     ACT[el.dataset.act](el.dataset.arg);
     if (S && S.hp <= 0 && S.screen !== 'battle') S.screen = 'over'; // 이벤트에서 스택을 다 잃은 경우
     if (S) save();
@@ -410,38 +428,59 @@
   });
 
   /* ───────── 그리기 ───────── */
+  // 카드 앞면: 왼쪽 위·오른쪽 아래 모서리 숫자, 가운데는 무늬(그림 카드는 큰 글자)
   function cardHTML(c, o = {}) {
     const fresh = !o.still && !seen.has(c.id);
     seen.add(c.id);
-    const cls = ['card', c.s === 1 || c.s === 2 ? 'red' : 'black', o.sel && 'sel', o.used && 'used', o.dim && 'dim', o.swap && 'swappable', fresh && 'deal']
+    const court = c.r >= 11;
+    const cls = ['card', c.s === 1 || c.s === 2 ? 'red' : 'black', court && 'court', c.en && 'en', o.sel && 'sel', o.used && 'used', o.dim && 'dim', o.swap && 'swappable', fresh && 'deal']
       .filter(Boolean).join(' ');
+    const rank = AD.rankLabel(c.r);
+    const suit = AD.SUITS[c.s];
+    const idx = (pos) => `<span class="idx ${pos}"><b>${rank}</b><i>${suit}</i></span>`;
     const en = c.en ? `<span class="seal seal-${c.en}">${AD.ENCHANTS[c.en].seal}</span>` : '';
-    const inner = `<span class="rk">${AD.rankLabel(c.r)}</span><span class="st">${AD.SUITS[c.s]}</span>${en}`;
+    const inner = `${idx('tl')}<span class="pip">${court ? rank : suit}</span>${idx('br')}${en}`;
     const label = cardName(c);
-    if (!o.act) return `<div class="${cls}" role="img" aria-label="${label}">${inner}</div>`;
-    return `<button class="${cls}" data-act="${o.act}" data-arg="${o.arg ?? c.id}" aria-label="${label}" aria-pressed="${!!o.sel}">${inner}</button>`;
+    const style = o.style ? ` style="${o.style}"` : '';
+    if (!o.act) return `<div class="${cls}"${style} role="img" aria-label="${label}">${inner}</div>`;
+    return `<button class="${cls}"${style} data-act="${o.act}" data-arg="${o.arg ?? c.id}" aria-label="${label}" aria-pressed="${!!o.sel}">${inner}</button>`;
   }
   const backHTML = () => '<div class="card back" role="img" aria-label="엎어 둔 카드"></div>';
   const slotHTML = () => '<div class="card slot" aria-hidden="true"></div>';
   const btn = (label, act, arg, cls = '', disabled = false) =>
     `<button class="btn ${cls}" data-act="${act}"${arg !== undefined ? ` data-arg="${arg}"` : ''}${disabled ? ' disabled' : ''}>${label}</button>`;
-  const bar = (v, max, cls) => `<span class="bar ${cls}" role="meter" aria-valuemin="0" aria-valuemax="${max}" aria-valuenow="${Math.max(0, v)}"><i style="width:${Math.max(0, Math.min(100, (v / max) * 100))}%"></i></span>`;
+  // 막대는 scaleX 로 그린다 — fx.js 가 직전 값에서 이어서 움직이게 data-key·data-v 를 남긴다
+  function bar(v, max, cls, key) {
+    const ratio = Math.max(0, Math.min(1, v / max)).toFixed(4);
+    return `<span class="bar ${cls}" data-key="${key}" data-v="${ratio}" role="meter" aria-valuemin="0" aria-valuemax="${max}" aria-valuenow="${Math.max(0, v)}"><i style="transform:scaleX(${ratio})"></i></span>`;
+  }
 
   function topbar() {
+    const muted = window.FX ? FX.muted : true;
+    const sound = window.FX
+      ? `<button class="btn ghost sm snd${muted ? ' off' : ''}" data-act="sound" aria-label="효과음 ${muted ? '켜기' : '끄기'}" aria-pressed="${!muted}">♪</button>`
+      : '';
     return `<header class="top">
-      <div class="stat stack"><span class="lbl">스택</span><b class="num">${S.hp}<small>/${S.maxHp}</small></b>${bar(S.hp, S.maxHp, 'hp')}</div>
-      <div class="stat"><span class="lbl">상금</span><b class="num">${S.gold}</b></div>
+      <div class="stat stack"><span class="lbl">스택</span><b class="num">${S.hp}<small>/${S.maxHp}</small></b>${bar(S.hp, S.maxHp, 'hp', 'me')}</div>
+      <div class="stat gold"><span class="lbl">상금</span><b class="num">${S.gold}</b></div>
       <div class="stat"><span class="lbl">층</span><b class="num">${S.floor}<small>/${AD.FLOORS}</small></b></div>
-      <div class="tools">${btn(`덱 ${S.deck.length}`, 'modal', 'deck', 'ghost sm')}${btn('규칙', 'modal', 'rules', 'ghost sm')}</div>
+      <div class="tools">${btn(`덱 ${S.deck.length}`, 'modal', 'deck', 'ghost sm')}${btn('규칙', 'modal', 'rules', 'ghost sm')}${sound}</div>
       ${S.charms.length ? `<div class="charms" aria-label="유물">${S.charms.map((id) => `<button class="charm" data-act="charm" data-arg="${id}">${AD.CHARMS[id].name}</button>`).join('')}</div>` : ''}
     </header>`;
   }
 
+  // 타이틀 장식: 떠다니는 무늬와 스페이드 로열 플러시 부채
+  const DRIFTS = Array.from({ length: 14 }, (_, i) =>
+    `<span style="--x:${(i * 37) % 100}%;--d:${11 + ((i * 7) % 9)}s;--delay:-${(i * 13) % 17}s;--s:${18 + ((i * 11) % 28)}px">${AD.SUITS[i % 4]}</span>`).join('');
+  const TITLE_FAN = [10, 11, 12, 13, 14].map((r, i) => ({ id: `title-${r}`, r, s: 0, en: null, rot: (i - 2) * 10 }));
+
   function vTitle() {
     const saved = loadSave();
     return `<main class="screen title">
+      <div class="drifts" aria-hidden="true">${DRIFTS}</div>
       <p class="eyebrow">헤즈업 홀덤 로그라이크</p>
       <h1 class="logo">올인<br>던전</h1>
+      <div class="fan" aria-hidden="true">${TITLE_FAN.map((c) => cardHTML(c, { style: `--r:${c.rot}deg` })).join('')}</div>
       <p class="lead">내 덱에서 핸드 두 장, 보드에 다섯 장. 헤즈업으로 상대 스택을 0으로 만들고, 카드를 모으고 강화해 3층 아래 하우스의 주인까지 내려가세요.</p>
       <div class="row">${btn('새로 시작', 'start', undefined, 'primary')}${saved ? btn(`이어 하기 · ${saved.floor}층`, 'cont') : ''}</div>
       <ol class="howto">
@@ -457,7 +496,7 @@
       const cls = [i < S.step && 'done', i === S.step && 'now', i === AD.STEPS && 'boss'].filter(Boolean).join(' ');
       return `<li class="${cls}"><span>${i === AD.STEPS ? '보스' : i + 1}</span></li>`;
     }).join('');
-    const nodes = S.choices.map((t) => `<button class="node node-${t}" data-act="node" data-arg="${t}"><b>${AD.NODES[t].name}</b><span>${AD.NODES[t].desc}</span></button>`).join('');
+    const nodes = S.choices.map((t) => `<button class="node node-${t}" data-act="node" data-arg="${t}"><span class="glyph" aria-hidden="true">${NODE_GLYPH[t]}</span><b>${AD.NODES[t].name}</b><span class="desc">${AD.NODES[t].desc}</span></button>`).join('');
     return `<main class="screen map">
       <h2 class="h">${S.floor}층</h2>
       <ol class="track" aria-label="층 진행">${dots}</ol>
@@ -482,13 +521,12 @@
         ? '<p class="tell"><span class="lbl">텔</span><b>없음</b> 속을 알 수 없다</p>'
         : `<p class="tell t${b.tell}"><span class="lbl">텔</span><b>${AD.TELLS[b.tell].mood}</b> ${AD.TELLS[b.tell].text}</p>`;
     }
-    const hit = b.result && b.result.toEnemy ? ' hit' : '';
     const ecards = b.ehole.map((c, i) => (b.shown[i] ? cardHTML(c, { used: b.result && b.result.eused && b.result.eused.includes(c.id) }) : backHTML())).join('');
-    return `<section class="enemy${hit}">
+    return `<section class="enemy ${e.kind}">
       <div class="medal" aria-hidden="true">${e.glyph}</div>
       <div class="who">
         <h2>${e.name} ${kind}</h2>
-        <div class="hpline">${bar(e.hp, e.maxHp, 'ehp')}<b class="num">${Math.max(0, e.hp)}<small>/${e.maxHp}</small></b></div>
+        <div class="hpline">${bar(e.hp, e.maxHp, 'ehp', 'enemy')}<b class="num">${Math.max(0, e.hp)}<small>/${e.maxHp}</small></b></div>
         <ul class="tags">${tags}</ul>
         <p class="edesc">${e.desc}</p>
       </div>
@@ -588,7 +626,7 @@
     const done = r.cardDone && r.charmDone;
     return `<main class="screen reward">
       <p class="eyebrow">매치 승리</p>
-      <h2 class="h">상금 +${r.gold}</h2>
+      <h2 class="h">상금 +<span class="count num" data-n="${r.gold}">${r.gold}</span></h2>
       <h3 class="sub">덱에 넣을 카드 1장${r.cardDone ? ' · 선택함' : ''}</h3>
       <div class="offers">${cards}</div>
       ${charms}
@@ -706,6 +744,12 @@
     const view = !S ? vTitle() : { map: vMap, battle: vBattle, reward: vReward, shop: vShop, rest: vRest, event: vEvent, over: vEnd, win: vEnd }[S.screen]();
     const top = S && S.screen !== 'over' && S.screen !== 'win' ? topbar() : '';
     app.innerHTML = top + view + vModal() + (ui.toast ? `<div class="toast" role="status">${ui.toast}</div>` : '');
+    const screen = S ? S.screen : 'title';
+    const changed = screen !== ui.screen;
+    ui.screen = screen;
+    if (window.FX) FX.run(ui.fx, { changed, screen, from: ui.from });
+    ui.fx = [];
+    ui.from = null;
   }
 
   // 아티팩트 뷰어가 새 버전을 받아도 판이 이어지게. 형식이 다른 옛 상태는 버린다.
