@@ -307,6 +307,7 @@
       try { localStorage.removeItem(SAVE_KEY); } catch (e) { /* 저장이 막힌 브라우저: 지울 저장도 없다 */ }
       S = null;
       ui.modal = null;
+      ui.shopPick = null;
     },
   };
 
@@ -368,7 +369,7 @@
     </main>`;
   }
 
-  // 고른 것의 이름·설명·값과 [구매]. 고르는 동안 제거·나가기 줄을 대신하고 [취소] 로 돌아간다.
+  // 고른 것의 이름·설명·값과 [구매]. 고르는 동안 제거·나가기 줄 바로 위에 붙는다.
   function shopPanel(pk) {
     const isCard = pk.kind === 'card';
     const item = S.shop[isCard ? 'cards' : 'charms'][pk.i];
@@ -380,7 +381,7 @@
     const buyBtn = short > 0
       ? btn(`상금이 ${short} 모자랍니다`, 'buy', undefined, 'primary wide', true)
       : btn(`구매 · ${item.price}`, 'buy', undefined, 'primary wide');
-    return `<div class="actions shoppick"><div class="pickinfo"><b>${name}</b><span>${desc}</span></div>
+    return `<div class="shoppick"><div class="pickinfo"><b>${name}</b><span>${desc}</span></div>
       <div class="pickbtns">${buyBtn}${btn('취소', 'shopCancel', undefined, 'ghost')}</div></div>`;
   }
 
@@ -405,7 +406,7 @@
       <h3 class="sub">카드 복제</h3>
       <p class="note">고른 카드의 강화 없는 사본을 덱에 넣습니다. 쓸 때마다 값이 20씩 오릅니다.</p>
       <div class="actions">${btn(`카드 복제 · ${S.dupCost}`, 'dupOpen', undefined, 'ghost')}</div>
-      ${pk ? shopPanel(pk) : `<div class="actions">${btn(`카드 제거 · ${S.removeCost}`, 'removeOpen', undefined, 'ghost')}${btn('나가기', 'leave', undefined, 'primary')}</div>`}
+      <div class="actions shopbar">${pk ? shopPanel(pk) : ''}${btn(`카드 제거 · ${S.removeCost}`, 'removeOpen', undefined, 'ghost')}${btn('나가기', 'leave', undefined, 'primary')}</div>
     </main>`;
   }
 
