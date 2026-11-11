@@ -295,10 +295,14 @@
     return out;
   }
 
-  function pickEnemy(floor, kind, rng = Math.random) {
-    const e = pick(ENEMIES.filter((x) => x.floor === floor && x.kind === kind), rng);
+  function pickEnemy(floor, kind, rng = Math.random, id = null) {
+    const e = pick(ENEMIES.filter((x) => x.floor === floor && x.kind === kind && (!id || x.id === id)), rng);
     return { hole: 2, armor: 0, heal: 0, lie: 0, bluff: 0.1, ...e };
   }
+
+  // 카드 합치기: 같은 숫자 두 장 → 숫자 +2(최대 A). 무늬는 먼저 고른 카드, 강화는 먼저 고른 카드 것(없으면 다른 쪽)
+  const mergeableRanks = (deck) => [...new Set(deck.filter((c) => deck.filter((d) => d.r === c.r).length >= 2).map((c) => c.r))];
+  const mergeCards = (a, b, id) => ({ id, r: Math.min(a.r + 2, 14), s: a.s, en: a.en || b.en || null });
 
   // 보상·상점 카드: 6~A, 층이 깊을수록 강화 확률이 오른다
   function randomCard(floor, newId, rng = Math.random) {
@@ -360,7 +364,7 @@
   const api = {
     SUITS, rankLabel, HANDS, ROYAL_BONUS, ANTE, ALLIN_ADD, ENCHANTS, ENCHANT_IDS, CHARMS, ENEMIES, NODES, STEPS, FLOORS, TELLS, RULES,
     shuffle, pick, starterDeck, tableDeck, eval5, best, isRoyal, describe, strength, tellOf, enemyFolds, enemyAct,
-    isForcedAllin, ruleNotice, rigCard, visibleBoard, foldDamage, resolveShowdown, pickEnemy, randomCard, randomCharms, genFloorMap, choicesAt, migrateSave,
+    isForcedAllin, ruleNotice, rigCard, visibleBoard, foldDamage, resolveShowdown, pickEnemy, mergeableRanks, mergeCards, randomCard, randomCharms, genFloorMap, choicesAt, migrateSave,
   };
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
   else root.AD = api;

@@ -2,8 +2,8 @@
    배경 그림은 scenes.js(SCENES), 연출은 fx.js(FX). */
 (function () {
   'use strict';
-  const VERSION = 6; // v6: 카드 복제 비용(dupCost)이 생겼다. v5: v5: 상대 고유 규칙(enemy.rule)·강제 올인 facing 이 생겼다. v4: 상대 벳·레이즈(battle.facing)가 생겨 v3 전투 저장과 다르다. v3: 층 지도가 갈림길(map·path)로 바뀌어 v2 저장과 형식이 다르다
-  const SAVE_KEY = 'allin-dungeon-v6';
+  const VERSION = 7; // v7: 이벤트 본 기록(seenEvents)·층 버프(floorBuff)·알아낸 보스(bossId)가 생겼다. v6: v6: 카드 복제 비용(dupCost)이 생겼다. v5: v5: 상대 고유 규칙(enemy.rule)·강제 올인 facing 이 생겼다. v4: 상대 벳·레이즈(battle.facing)가 생겨 v3 전투 저장과 다르다. v3: 층 지도가 갈림길(map·path)로 바뀌어 v2 저장과 형식이 다르다
+  const SAVE_KEY = 'allin-dungeon-v7';
   const PROFILE_KEY = 'allin-dungeon-profile';
   const START_STACK = 80;
   const MIN_DECK = 8;
@@ -56,7 +56,7 @@
     ui.restPick = null;
     S = {
       v: VERSION, screen: 'map', hp: START_STACK, maxHp: START_STACK, gold: 40, deck: [], charms: [],
-      floor: 1, step: 0, node: null, map: AD.genFloorMap(rnd), path: [], removeCost: 50, dupCost: 60, nextId: 0,
+      floor: 1, step: 0, node: null, map: AD.genFloorMap(rnd), path: [], removeCost: 50, dupCost: 60, nextId: 0, seenEvents: [], floorBuff: null, bossId: null,
       stats: { hands: 0, won: 0, best: -1, kills: 0 },
     };
     S.deck = AD.starterDeck(newId, rnd);
@@ -72,6 +72,8 @@
       S.step = 0;
       S.map = AD.genFloorMap(rnd);
       S.path = [];
+      S.floorBuff = null;
+      S.bossId = null;
       note({ bestFloor: Math.max(P.bestFloor, S.floor) });
     } else S.step++;
     S.node = null;
@@ -95,14 +97,14 @@
     rnd, btn, MIN_DECK, CHANGES, STREETS,
   };
   const { startMatch, vBattle, ACT: battleAct } = window.BATTLE(C);
-  const { EVENTS, vEvent, ACT: eventAct } = window.EVENTS_MOD(C);
+  const { pickEvent, vEvent, ACT: eventAct } = window.EVENTS_MOD(C);
 
   function enterNode(type) {
     S.node = type;
     if (type === 'fight' || type === 'elite' || type === 'boss') return startMatch(type);
     if (type === 'shop') return openShop();
     if (type === 'rest') { S.rest = { offers: AD.shuffle(AD.ENCHANT_IDS, rnd).slice(0, 2) }; S.screen = 'rest'; return; }
-    S.event = { id: AD.pick(EVENTS, rnd).id, done: null };
+    S.event = pickEvent();
     S.screen = 'event';
   }
 
@@ -202,7 +204,25 @@
       ui.modal = { type: 'deck', purpose: 'enchant', en: k, from: 'rest' };
     },
     // 덱 시트(강화·제거): 카드를 누르면 고르기만, 확인 버튼에서 적용
-    pickDeck(id) { if (ui.modal) ui.modal = { ...ui.modal, pick: ui.modal.pick === id ? null : id }; },
+    pickDeck(id) {
+      const m = ui.modal;
+      if (!m) return;
+      if (m.purpose === 'merge') { // 두 장까지: 다시 누르면 취소, 세 번째는 먼저 고른 것을 밀어낸다
+        const picks = m.picks.includes(id) ? m.picks.filter((p) => p !== id) : [...m.picks, id].slice(-2);
+        ui.modal = { ...m, picks };
+        return;
+      }
+      ui.modal = { ...m, pick: m.pick === id ? null : id };
+    },
+    mergeConfirm() {
+      const m = ui.modal;
+      const [a, b] = (m && m.picks || []).map((id) => S.deck.find((c) => c.id === id));
+      if (!a || !b || a.r !== b.r) return toast('같은 숫자 카드 2장을 고르세요');
+      ui.modal = null;
+      const merged = AD.mergeCards(a, b, newId());
+      S.deck = [...S.deck.filter((c) => c.id !== a.id && c.id !== b.id), merged];
+      S.event = { ...S.event, done: `${cardName(merged)}이(가) 됐다.` };
+    },
     deckConfirm() {
       const m = ui.modal;
       const id = m && m.pick;
@@ -217,8 +237,9 @@
         return;
       }
       if (m.purpose === 'dup') {
-        S.gold -= m.cost; S.dupCost += 20;
         S.deck = [...S.deck, { ...card, id: newId(), en: null }];
+        if (m.from === 'event') { hurt(m.hp || 0); S.event = { ...S.event, done: `${cardName(card)}을(를) 복제했다.` }; return; }
+        S.gold -= m.cost; S.dupCost += 20;
         toast(`${cardName(card)} 복제`);
         return;
       }
@@ -228,6 +249,7 @@
         return;
       }
       S.deck = S.deck.map((c) => (c.id === id ? { ...c, en: m.en } : c));
+      if (m.cost) S.gold -= m.cost;
       const msg = `${cardName(card)}에 ${AD.ENCHANTS[m.en].name} 강화.`;
       if (m.from === 'event') S.event = { ...S.event, done: msg };
       else advance();

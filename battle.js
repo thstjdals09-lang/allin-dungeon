@@ -7,7 +7,7 @@ window.BATTLE = function (C) {
 
   /* ───────── 매치 (헤즈업 한 판) ───────── */
   function startMatch(kind) {
-    const e = AD.pickEnemy(C.S.floor, kind === 'fight' ? 'normal' : kind, rnd);
+    const e = AD.pickEnemy(C.S.floor, kind === 'fight' ? 'normal' : kind, rnd, kind === 'boss' ? C.S.bossId : null); // 정보원이 알려 준 보스를 그대로
     C.S.battle = { enemy: { ...e, maxHp: e.hp }, draw: AD.shuffle(C.S.deck, rnd), discard: [], hand: [], handNo: 0, log: [] };
     remember('enemies', e.id);
     C.S.screen = 'battle';
@@ -68,7 +68,7 @@ window.BATTLE = function (C) {
     b.hole = [];
     b.pot = b.enemy.rule === 'bigPot' ? 2 : 1;
     b.street = 0;
-    b.changes = Math.max(0, CHANGES + (has('coin') ? 1 : 0) - (b.enemy.rule === 'stealChange' ? 1 : 0));
+    b.changes = Math.max(0, CHANGES + (has('coin') ? 1 : 0) - (b.enemy.rule === 'stealChange' ? 1 : 0) + ((C.S.floorBuff && C.S.floorBuff.changes) || 0));
     b.result = null;
     b.facing = null;
     b.allin = false;
@@ -305,7 +305,7 @@ window.BATTLE = function (C) {
 
     const holeNow = b.phase === 'pick' ? b.hand.filter((c) => b.sel.includes(c.id)) : b.hole;
     const pres = holeNow.length === 2 && b.phase !== 'end' ? AD.best([...holeNow, ...AD.visibleBoard(b.enemy, b.board, false)]) : null;
-    const pips = Array.from({ length: CHANGES + (has('coin') ? 1 : 0) }, (_, i) => `<i class="${i < b.changes ? 'on' : ''}"></i>`).join('');
+    const pips = Array.from({ length: CHANGES + (has('coin') ? 1 : 0) + ((C.S.floorBuff && C.S.floorBuff.changes) || 0) }, (_, i) => `<i class="${i < b.changes ? 'on' : ''}"></i>`).join('');
     const swapBtn = b.phase === 'bet' && !b.facing
       ? btn(ui.swap ? '취소' : `보드 체인지 · ${swapCost()}`, 'swapmode', undefined, 'ghost sm', !ui.swap && b.changes < swapCost())
       : '';

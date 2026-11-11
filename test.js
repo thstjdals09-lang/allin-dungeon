@@ -147,6 +147,18 @@ assert.strictEqual(AD.enemyAct(foe, 0.9, 'raise', seq(0.5, 0.01)), 'call');
 assert.strictEqual(AD.enemyAct(foe, 0.1, 'allin', seq(0.5)), 'fold');
 assert.strictEqual(AD.pickEnemy(1, 'normal').bluff >= 0.1, true);
 
+// 이벤트: 카드 합치기와 특정 보스 고르기
+{
+  const d = [{ id: 'a', r: 9, s: 0, en: null }, { id: 'b', r: 9, s: 2, en: 'x' }, { id: 'c', r: 5, s: 1, en: null }, { id: 'd', r: 13, s: 1, en: null }, { id: 'e', r: 13, s: 3, en: null }];
+  assert.deepStrictEqual(AD.mergeableRanks(d).sort((x, y) => x - y), [9, 13]);
+  assert.deepStrictEqual(AD.mergeableRanks([d[0], d[2]]), []);
+  assert.deepStrictEqual(AD.mergeCards(d[0], d[1], 'n'), { id: 'n', r: 11, s: 0, en: 'x' }); // 강화는 없는 쪽 대신 있는 쪽
+  assert.deepStrictEqual(AD.mergeCards(d[1], d[0], 'n'), { id: 'n', r: 11, s: 2, en: 'x' });
+  assert.deepStrictEqual(AD.mergeCards(d[3], d[4], 'n'), { id: 'n', r: 14, s: 1, en: null }); // 13+2 는 A 에서 멈춤
+  assert.strictEqual(AD.mergeCards({ r: 14, s: 0, en: null }, { r: 14, s: 1, en: null }, 'n').r, 14);
+  assert.strictEqual(AD.pickEnemy(2, 'boss', Math.random, 'croupier').id, 'croupier');
+}
+
 // 보스·하이롤러 규칙
 {
   const ruled = AD.ENEMIES.filter((e) => e.rule).map((e) => e.rule).sort();

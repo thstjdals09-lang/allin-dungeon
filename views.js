@@ -177,18 +177,23 @@
   // 강화·제거할 카드 고르기: 누르면 고르기만(다시 누르면 취소), 아래 확인 버튼에서 적용, 닫기로 그만두기
   function deck(m, S) {
     const picking = m.purpose;
-    const blocked = (c) => (picking === 'enchant' && !!c.en) || (picking === 'rankup' && c.r >= 14);
+    const picks = (m.picks || []).map((id) => S.deck.find((c) => c.id === id)).filter(Boolean);
+    const blocked = (c) => (picking === 'enchant' && !!c.en) || (picking === 'rankup' && c.r >= 14)
+      || (picking === 'merge' && (picks.length ? c.r !== picks[0].r : !AD.mergeableRanks(S.deck).includes(c.r)));
     const list = S.deck.slice().sort((a, b) => b.r - a.r || a.s - b.s)
       .map((c) => (picking && !blocked(c)
-        ? cardHTML(c, { act: 'pickDeck', still: true, sel: m.pick === c.id })
+        ? cardHTML(c, { act: 'pickDeck', arg: c.id, still: true, sel: m.pick === c.id || picks.includes(c) })
         : cardHTML(c, { still: true, dim: blocked(c) })))
       .join('');
     const chosen = m.pick && S.deck.find((c) => c.id === m.pick);
+    const merge = picking === 'merge';
     const confirm = !picking ? ''
+      : merge ? `<div class="confirm"><span>${picks.length ? `고른 카드 <b>${picks.map((c) => cardName(c)).join(' + ')}</b>` : '같은 숫자 카드 2장을 누르세요. 다시 누르면 취소됩니다.'}</span>
+         ${btn('합치기 (숫자 +2)', 'mergeConfirm', undefined, 'primary', picks.length < 2)}</div>`
       : `<div class="confirm"><span>${chosen ? `고른 카드 <b>${cardName(chosen)}</b>` : '카드를 누르세요. 다시 누르면 취소됩니다.'}</span>
-         ${btn(picking === 'remove' ? `제거하기${m.cost ? ` · ${m.cost}` : ''}` : picking === 'dup' ? `복제하기 · ${m.cost}` : picking === 'rankup' ? '단련하기 (숫자 +1)' : `${AD.ENCHANTS[m.en].name} 강화하기`, 'deckConfirm', undefined, 'primary', !chosen)}</div>`;
+         ${btn(picking === 'remove' ? `제거하기${m.cost ? ` · ${m.cost}` : ''}` : picking === 'dup' ? (m.hp ? `복제하기 · 스택 −${m.hp}` : `복제하기 · ${m.cost}`) : picking === 'rankup' ? '단련하기 (숫자 +1)' : `${AD.ENCHANTS[m.en].name} 강화하기${m.cost ? ` · ${m.cost}` : ''}`, 'deckConfirm', undefined, 'primary', !chosen)}</div>`;
     const head = picking === 'remove' ? `제거할 카드${m.cost ? ` · ${m.cost}` : ''}`
-      : picking === 'dup' ? `복제할 카드 · ${m.cost}` : picking === 'rankup' ? '단련할 카드 (숫자 +1)'
+      : picking === 'merge' ? '합칠 카드 2장 (숫자 +2)' : picking === 'dup' ? (m.hp ? `복제할 카드 · 스택 −${m.hp}` : `복제할 카드 · ${m.cost}`) : picking === 'rankup' ? '단련할 카드 (숫자 +1)'
       : picking === 'enchant' ? `${AD.ENCHANTS[m.en].name} 강화할 카드` : `내 덱 · ${S.deck.length}장`;
     const suits = AD.SUITS.map((s, i) => `${s} ${S.deck.filter((c) => c.s === i).length}`).join(' · ');
     const high = S.deck.filter((c) => c.r >= 11).length;
@@ -270,8 +275,10 @@
       ? `<div class="mapinfo"><span class="glyph" aria-hidden="true">${NODE_GLYPH[t]}</span><div><b>${AD.NODES[t].name}</b><span>${AD.NODES[t].desc}</span></div></div>${btn('들어가기', 'go', sel, 'primary')}`
       : '<p class="hint">빛나는 칸을 눌러 다음 행선지를 고르세요.</p>';
     const left = AD.STEPS - S.step;
+    const boss = S.bossId && AD.ENEMIES.find((x) => x.id === S.bossId);
+    const bossNote = boss ? `<p class="note bossnote">보스 · <b>${boss.name}</b>${boss.rule ? ` · ${AD.RULES[boss.rule].name}: ${AD.RULES[boss.rule].desc}` : ''}</p>` : '';
     return `<main class="screen map">
-      <div class="maphead"><h2 class="h">지하 ${S.floor}층</h2><span class="lbl">${left ? `보스까지 ${left}칸` : '보스 테이블'}</span></div>
+      <div class="maphead"><h2 class="h">지하 ${S.floor}층</h2><span class="lbl">${left ? `보스까지 ${left}칸` : '보스 테이블'}</span></div>${bossNote}
       <div class="mapboard">
         <span class="watermark" aria-hidden="true">B${S.floor}</span>
         <svg class="maplines" viewBox="0 0 ${MAP_W} ${MAP_H}" aria-hidden="true">${mapLines(S, here)}</svg>
