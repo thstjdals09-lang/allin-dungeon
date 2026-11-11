@@ -51,7 +51,7 @@
   // 다시 그리면서 기준 요소가 사라지면 mouseout·blur 가 오지 않는다
   new MutationObserver(() => { if (anchor && !anchor.isConnected) hide(); }).observe(document.body, { childList: true, subtree: true });
   const dropStale = () => { if (anchor && !anchor.isConnected) hide(); };
-  document.addEventListener('mousedown', () => { suppressUntil = 0; dropStale(); }, true);
+  document.addEventListener('mousedown', () => { if (Date.now() - lastTouch > TOUCH_MOUSE_GAP) suppressUntil = 0; dropStale(); }, true); // 터치 뒤 호환 마우스 이벤트는 제외
   document.addEventListener('keydown', () => { suppressUntil = 0; dropStale(); }, true);
 
   document.addEventListener('touchstart', (e) => {
