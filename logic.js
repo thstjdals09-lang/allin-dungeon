@@ -25,7 +25,7 @@
   const ENCHANTS = {
     fire: { name: '불꽃', seal: '불', desc: '홀카드로 써서 이기면 피해 +4' },
     steel: { name: '강철', seal: '철', desc: '홀카드로 써서 지면 받는 피해 −4' },
-    gold: { name: '황금', seal: '금', desc: '홀카드로 정하면 칩 +5' },
+    gold: { name: '황금', seal: '금', desc: '홀카드로 쓰고 접지 않으면 칩 +5' },
     wild: { name: '만능', seal: '만', desc: '어떤 무늬로도 친다' },
     eye: { name: '투시', seal: '눈', desc: '홀카드로 정하면 상대 카드 1장이 보인다' },
     blood: { name: '흡혈', seal: '피', desc: '홀카드로 써서 이기면 체력 3 회복' },

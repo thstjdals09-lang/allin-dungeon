@@ -23,7 +23,8 @@
   function loadSave() {
     try {
       const s = JSON.parse(localStorage.getItem(SAVE_KEY) || 'null');
-      return s && s.screen !== 'over' && s.screen !== 'win' ? s : null;
+      const resumable = ['map', 'battle', 'reward', 'shop', 'rest', 'event'];
+      return s && Array.isArray(s.deck) && resumable.includes(s.screen) ? s : null;
     } catch (e) { return null; }
   }
 
@@ -95,6 +96,12 @@
   }
 
   function log(msg) { S.battle.log = [msg, ...S.battle.log].slice(0, 6); }
+
+  // 황금 각인은 내가 접지 않은 핸드에서만 — 홀카드만 정하고 접어서 칩을 모으는 길을 막는다
+  function payGold(b) {
+    const gold = 5 * b.hole.filter((c) => c.en === 'gold').length;
+    if (gold) { S.gold += gold; log(`황금 각인으로 칩 +${gold}`); }
+  }
 
   function startHand() {
     const b = S.battle;
@@ -227,8 +234,6 @@
       if (b.sel.length !== 2) return toast('홀카드는 정확히 2장입니다');
       b.hole = b.hand.filter((c) => b.sel.includes(c.id));
       S.stats.hands++;
-      const gold = 5 * b.hole.filter((c) => c.en === 'gold').length;
-      if (gold) { S.gold += gold; log(`황금 각인으로 칩 +${gold}`); }
       b.hole.filter((c) => c.en === 'eye').forEach(() => reveal(b));
       b.phase = 'bet';
     },
@@ -245,6 +250,7 @@
       b.mult = +m === 3 && has('ring') ? 4 : +m;
       if (AD.enemyFolds(b.enemy, b.str, b.mult, has('face') ? 1.25 : 1, rnd)) {
         const d = AD.foldDamage(b.mult);
+        payGold(b);
         b.enemy.hp -= d;
         b.shown = b.shown.map(() => true);
         b.result = { type: 'efold', toEnemy: d };
@@ -275,6 +281,7 @@
       const pres = AD.best([...b.hole, ...b.board]);
       const eres = AD.best([...b.ehole, ...b.board]);
       const out = AD.resolveShowdown({ pres, eres, hole: b.hole, mult: b.mult, charms: S.charms, enemy: b.enemy });
+      payGold(b);
       b.shown = b.shown.map(() => true);
       b.enemy.hp = Math.min(b.enemy.maxHp, b.enemy.hp - out.toEnemy + out.enemyHeal);
       hurt(out.toPlayer);
@@ -626,6 +633,7 @@
         ${AD.HANDS.map((h) => `<tr><td>${h.name}</td><td class="num">${h.dmg}</td></tr>`).slice().reverse().join('')}
         <tr><td>로열 플러시</td><td class="num">+${AD.ROYAL_BONUS}</td></tr></tbody></table>
         <p class="note">피해 = 족보 피해 × 판돈(체크 ×1 · 레이즈 ×2 · 올인 ×3). 상대가 이기면 상대 피해 배수가 붙는다. 내 덱 카드는 테이블 카드와 겹칠 수 있어서 파이브카드도 나온다.</p>
+        <p class="note">손기술은 핸드마다 2. 손패 1장 다시 뽑기에 1, 턴·리버 뒤 테이블 카드 바꿔치기에 2를 쓴다. 내가 접으면 체력 −${AD.ANTE}, 레이즈·올인에 상대가 접으면 상대 −${AD.ANTE}×판돈.</p>
         <h3 class="sub">각인</h3>
         <ul class="enlist">${AD.ENCHANT_IDS.map((k) => `<li><span class="seal seal-${k} inline">${AD.ENCHANTS[k].seal}</span><b>${AD.ENCHANTS[k].name}</b> ${AD.ENCHANTS[k].desc}</li>`).join('')}</ul>
         <p class="note">각인 효과는 홀카드로 고른 카드에만 붙는다.</p>`;
