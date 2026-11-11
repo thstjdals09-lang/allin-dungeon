@@ -2,7 +2,7 @@
    배경 그림은 scenes.js(SCENES), 연출은 fx.js(FX). */
 (function () {
   'use strict';
-  const VERSION = 10; // v10: 상대 수식어(enemy.affixes·valueBonus·goldMul)·연승(battle.streak)이 생겼다. v9: 트릭(S.tricks·보상 trick·상점 tricks)이 생겼다. v8: 캐릭터(char)·난이도(level)·오늘의 도전(daily·rngState)이 생겼다. v7: 이벤트 본 기록(seenEvents)·층 버프(floorBuff)·알아낸 보스(bossId)가 생겼다. v6: v6: 카드 복제 비용(dupCost)이 생겼다. v5: v5: 상대 고유 규칙(enemy.rule)·강제 올인 facing 이 생겼다. v4: 상대 벳·레이즈(battle.facing)가 생겨 v3 전투 저장과 다르다. v3: 층 지도가 갈림길(map·path)로 바뀌어 v2 저장과 형식이 다르다
+  const VERSION = 10; // v10: 상대 수식어(enemy.affixes·valueBonus·goldMul)·연승(battle.streak)이 생겼다. v9: 트릭(S.tricks·보상 trick·상점 tricks)이 생겼다. v8: 캐릭터(char)·난이도(level)·오늘의 도전(daily·rngState)이 생겼다. v7: 이벤트 본 기록(seenEvents)·층 버프(floorBuff)·알아낸 보스(bossId)가 생겼다. v6: 카드 복제 비용(dupCost)이 생겼다. v5: 상대 고유 규칙(enemy.rule)·강제 올인 facing 이 생겼다. v4: 상대 벳·레이즈(battle.facing)가 생겨 v3 전투 저장과 다르다. v3: 층 지도가 갈림길(map·path)로 바뀌어 v2 저장과 형식이 다르다
   const SAVE_KEY = 'allin-dungeon-v10';
   const PROFILE_KEY = 'allin-dungeon-profile';
   const START_STACK = 80;
@@ -23,7 +23,7 @@
   // 저장하지 않는 화면 상태. fx = 이번 클릭에서 일어난 일(fx.js 가 연출), from = 누른 버튼 위치
   // mapSel = 지도에서 눌러 둔 칸(들어가기 전 확인용)
   let ui = { modal: null, swap: false, toast: '', fx: [], from: null, screen: null, mapSel: null, restPick: null, shopPick: null, trickSel: null };
-  const { cardName, cardHTML, backHTML, slotHTML, btn, bar } = V;
+  const { cardName, cardHTML, btn, bar } = V;
 
   const has = (k) => S.charms.includes(k);
   const fx = (ev) => { ui.fx = [...ui.fx, ev]; };
@@ -98,7 +98,7 @@
 
   function advance() {
     if (S.node === 'boss') {
-      if (S.floor === AD.FLOORS) { recordWin(); S.screen = 'win'; return; }
+      if (S.floor === AD.FLOORS) { if (!S.daily) recordWin(); S.screen = 'win'; return; }
       S.floor++;
       S.step = 0;
       S.map = AD.genFloorMap(rnd);
@@ -350,7 +350,7 @@
     </header>`;
   }
 
-  const vTitle = () => V.title(loadSave(), P, META.dailyText(P.daily[META.todayKey()]));
+  const vTitle = () => V.title(loadSave(), P, META.dailyText(P.daily[META.todayKey()], !!(loadSave() && loadSave().daily === META.todayKey())));
   const vMap = () => V.map(S, choices(), ui.mapSel);
 
   // 덱빌딩 판단용: 아직 안 받은 카드는 넣으면 같은 숫자가 몇 장이 되는지, 받은 카드는 지금 몇 장인지

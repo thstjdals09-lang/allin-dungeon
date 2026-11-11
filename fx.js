@@ -192,6 +192,7 @@
   };
   const DECL_MS = 1100;
   const END_MS = 1400;
+  const EBET_HOLD_MS = 300;
   const esc = (t) => String(t).replace(/[&<>]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' }[c]));
 
   // 글자 요소를 만들어 붙이고 돌려준다. 동작 줄이기·anime 없음이면 정지한 채 보이고 같은 시간 뒤 사라진다(CSS 만).
@@ -395,6 +396,7 @@
     },
     // 상대 벳·레이즈: 상대 메달에서 팟으로 칩이 날아간다
     ebet(ev, at, opt) {
+      holdActions(at + EBET_HOLD_MS); // 빠른 두 번 탭이 안 보이는 콜을 누르지 않게
       const medal = $('.enemy .medal');
       return HANDLERS.chip(ev, at, { ...opt, from: medal ? medal.getBoundingClientRect() : null });
     },
@@ -511,6 +513,5 @@
     toggleFast,
     get muted() { return muted; },
     get fast() { return fast; },
-    get moving() { return on(); },
   };
 })();

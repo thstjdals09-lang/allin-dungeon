@@ -75,7 +75,7 @@ window.EVENTS_MOD = function (C) {
     {
       id: 'blood', title: '피의 계약서', text: '붉은 잉크로 쓴 계약서다. 서명하면 유물 하나를 준다고 한다. 잉크는 내 피다.',
       opts: [{
-        label: '스택 15를 내고 서명', ok: () => C.S.hp > 15 && AD.randomCharms(1, C.S.charms, rnd).length > 0, no: '스택이 모자라거나 받을 유물이 없습니다',
+        label: '스택 15를 내고 서명', ok: () => C.S.hp > 15 && Object.keys(AD.CHARMS).some((k) => !C.S.charms.includes(k)), no: '스택이 모자라거나 받을 유물이 없습니다',
         run: () => {
           hurt(15);
           const [c] = AD.randomCharms(1, C.S.charms, rnd);

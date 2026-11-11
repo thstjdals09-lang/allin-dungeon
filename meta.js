@@ -28,7 +28,7 @@
   const todayKey = (d = new Date()) => `${d.getFullYear()}${String(d.getMonth() + 1).padStart(2, '0')}${String(d.getDate()).padStart(2, '0')}`;
   // 날짜별 최고 결과: 정복이 우선, 같으면 더 깊은 층
   const betterDaily = (a, b) => (!a ? b : b.won !== a.won ? (b.won ? b : a) : b.floor > a.floor ? b : a);
-  const dailyText = (r) => (r ? `${r.floor}층 · ${r.won ? '정복' : '탈락'}` : '');
+  const dailyText = (r, live) => (r ? `${r.floor}층 · ${r.won ? '정복' : live ? '진행 중' : '탈락'}` : '');
   const nextMaxLevel = (maxLevel, level) => Math.max(maxLevel, Math.min(MAX_LEVEL, level + 1));
 
   // "새 도전" 시트. m = {char, level, daily}, saved = 이어 할 저장(있으면 덮어쓰기 경고)
@@ -37,7 +37,7 @@
     const warn = saved ? `<p class="note warn" role="alert">진행 중인 도전(${saved.floor}층)이 사라집니다.</p>` : '';
     if (m.daily) {
       return `<h2 class="h">오늘의 도전</h2><p class="note">떠돌이 · 난이도 0 · 오늘 날짜로 지도와 카드가 정해집니다.</p>${warn}
-        <div class="row">${btn('시작', 'startDaily', undefined, 'primary wide')}</div>`;
+        <div class="row">${btn('시작', 'startDaily', undefined, saved ? 'danger wide' : 'primary wide')}</div>`;
     }
     const chars = CHARACTERS.map((c) => {
       const open = unlocked(c, P);

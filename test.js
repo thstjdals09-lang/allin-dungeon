@@ -79,6 +79,8 @@ assert.strictEqual(out.toEnemy, 1, '방어가 커도 이기면 최소 1');
   const run5 = mk([3, 4, 5, 6, 7, 9].map((r) => [r, 0]));
   assert.strictEqual(win(4, ['ladder'], run6), 22, '연속 6 → 스트레이트 ×2');
   assert.strictEqual(win(8, ['ladder'], run6), 60);
+  const runA = mk([14, 2, 3, 4, 5, 6].map((r) => [r, 0]));
+  assert.strictEqual(win(4, ['ladder'], runA), 22, 'A-2-3-4-5-6 도 연속 6');
   assert.strictEqual(win(4, ['ladder'], run5), 11, '연속 5까지면 그대로');
   assert.strictEqual(win(4, ['ladder', 'ruler'], run6), 22 + 10);
   assert.strictEqual(win(0, ['slim'], mk(Array.from({ length: 14 }, (_, i) => [2 + (i % 13), 0]))), 2 + 4, '덱 14장 → +4');
@@ -152,6 +154,7 @@ assert.strictEqual(AD.pickEnemy(1, 'normal').bluff >= 0.1, true);
 {
   const d = [{ id: 'a', r: 9, s: 0, en: null }, { id: 'b', r: 9, s: 2, en: 'x' }, { id: 'c', r: 5, s: 1, en: null }, { id: 'd', r: 13, s: 1, en: null }, { id: 'e', r: 13, s: 3, en: null }];
   assert.deepStrictEqual(AD.mergeableRanks(d).sort((x, y) => x - y), [9, 13]);
+  assert.deepStrictEqual(AD.mergeableRanks([{ id: 'x', r: 14, s: 0, en: null }, { id: 'y', r: 14, s: 1, en: null }]), [], 'A 는 합칠 수 없다');
   assert.deepStrictEqual(AD.mergeableRanks([d[0], d[2]]), []);
   assert.deepStrictEqual(AD.mergeCards(d[0], d[1], 'n'), { id: 'n', r: 11, s: 0, en: 'x' }); // 강화는 없는 쪽 대신 있는 쪽
   assert.deepStrictEqual(AD.mergeCards(d[1], d[0], 'n'), { id: 'n', r: 11, s: 2, en: 'x' });
@@ -178,11 +181,10 @@ assert.strictEqual(AD.pickEnemy(1, 'normal').bluff >= 0.1, true);
   assert.strictEqual(rig.card.r, 14, '에이스로 트리플');
   assert.ok(AD.strength(eh, bd.map((c, k) => (k === rig.index ? rig.card : c))) > AD.strength(eh, bd));
   assert.strictEqual(AD.rigCard(C('Ah Ad'), C('As Ac 9d'), C('2c 3d 4h')), null, '나빠지기만 하면 안 바꾼다');
-  // 하우스: 리버는 끝나기 전에만 숨김
+  // 하우스: 리버는 내게 숨김
   const full = C('2c 7s 9d Jh Qs');
-  assert.strictEqual(AD.visibleBoard({ rule: 'hiddenCard' }, full, false).length, 4);
-  assert.strictEqual(AD.visibleBoard({ rule: 'hiddenCard' }, full, true).length, 5);
-  assert.strictEqual(AD.visibleBoard({}, full, false).length, 5);
+  assert.strictEqual(AD.visibleBoard({ rule: 'hiddenCard' }, full).length, 4);
+  assert.strictEqual(AD.visibleBoard({}, full).length, 5);
 }
 
 
@@ -206,6 +208,8 @@ assert.strictEqual(AD.pickEnemy(1, 'normal').bluff >= 0.1, true);
   assert.strictEqual(META.startStack('whale', 3), 55);
   assert.deepStrictEqual([0, 5, 5].map((l, i) => META.nextMaxLevel([0, 2, 5][i], l)), [1, 5, 5]);
   assert.ok(!META.unlocked(META.charOf('reader'), { wins: 1 }) && META.unlocked(META.charOf('reader'), { wins: 2 }));
+  assert.strictEqual(META.dailyText({ floor: 2, won: false }, true), '2층 · 진행 중');
+  assert.strictEqual(META.dailyText({ floor: 2, won: false }, false), '2층 · 탈락');
   const lose = { floor: 3, won: false }, win = { floor: 1, won: true };
   assert.strictEqual(META.betterDaily(lose, win), win);
   assert.strictEqual(META.betterDaily(win, lose), win);
@@ -259,7 +263,10 @@ assert.strictEqual(AD.canUseTrick('peek', { ...ts, street: 0, hiddenCard: true }
 assert.ok(AD.canUseTrick('peek', { ...ts, peeked: true }));
 assert.ok(AD.canUseTrick('mark', { ...ts, hiddenEnemyCards: 0 }));
 assert.ok(AD.canUseTrick('stare', { ...ts, stared: true }));
-assert.strictEqual(AD.canUseTrick('stare', { ...ts, facing: true }), null);
+assert.strictEqual(AD.canUseTrick('stare', { ...ts, facing: true, facingKind: 'bet' }), null);
+assert.ok(AD.canUseTrick('stare', { ...ts, neverFolds: true }), '폴드 안 하는 상대');
+assert.ok(AD.canUseTrick('stare', { ...ts, facing: true, facingKind: 'raise' }), '레이즈 뒤 노려보기 불가');
+assert.ok(AD.canUseTrick('stare', { ...ts, facing: true, facingKind: 'allin' }), '올인 뒤 노려보기 불가');
 assert.ok(AD.canUseTrick('double', { ...ts, facing: true }), '상대 벳 중 더블 다운 불가');
 assert.ok(AD.canUseTrick('nope', ts));
 assert.strictEqual(AD.trickRoom(2), null);

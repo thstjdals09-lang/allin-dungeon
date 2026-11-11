@@ -326,7 +326,7 @@ window.BATTLE = function (C) {
   // 엿본 카드가 아직 다음 차례인지(보드 체인지로 바뀌었으면 아님)
   const peeked = (b) => !!(b.peek && b.table[0] && b.peek.id === b.table[0].id);
   const trickState = (b) => ({
-    phase: b.phase, street: b.street, facing: !!b.facing, hiddenCard: b.enemy.rule === 'hiddenCard', peeked: peeked(b),
+    phase: b.phase, street: b.street, facing: !!b.facing, facingKind: b.facing && b.facing.kind, neverFolds: !b.enemy.tight, hiddenCard: b.enemy.rule === 'hiddenCard', peeked: peeked(b),
     hiddenEnemyCards: b.shown.filter((v) => !v).length, stared: b.stare,
   });
 
@@ -361,7 +361,7 @@ window.BATTLE = function (C) {
       : cardHTML(c, { sel: inHole(c), dim: !inHole(c), used: used.includes(c.id), style: fan(i) }))).join('');
 
     const holeNow = b.phase === 'pick' ? b.hand.filter((c) => b.sel.includes(c.id)) : b.hole;
-    const pres = holeNow.length === 2 && b.phase !== 'end' ? AD.best([...holeNow, ...AD.visibleBoard(b.enemy, b.board, false)]) : null;
+    const pres = holeNow.length === 2 && b.phase !== 'end' ? AD.best([...holeNow, ...AD.visibleBoard(b.enemy, b.board)]) : null;
     const pips = Array.from({ length: CHANGES + C.bonusChanges() }, (_, i) => `<i class="${i < b.changes ? 'on' : ''}"></i>`).join('');
     const swapBtn = b.phase === 'bet' && !b.facing
       ? btn(ui.swap ? '취소' : `보드 체인지 · ${swapCost()}`, 'swapmode', undefined, 'ghost sm', !ui.swap && b.changes < swapCost())

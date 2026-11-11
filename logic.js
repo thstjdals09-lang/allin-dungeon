@@ -72,7 +72,7 @@
   const rewardTrick = (rng = Math.random) => (rng() < TRICK_REWARD_CHANCE ? pick(TRICK_IDS, rng) : null);
   // 상점: 서로 다른 트릭 2개, 기본 가격 30~40 (난이도 가격은 호출 쪽에서)
   const shopTricks = (rng = Math.random) => shuffle(TRICK_IDS, rng).slice(0, 2).map((id) => ({ id, price: 30 + Math.floor(rng() * 3) * 5 }));
-  // 지금 쓸 수 없으면 이유(한국어), 쓸 수 있으면 null. st = { phase, street, facing, hiddenCard, peeked, hiddenEnemyCards, stared }
+  // 지금 쓸 수 없으면 이유(한국어), 쓸 수 있으면 null. st = { phase, street, facing, facingKind, neverFolds, hiddenCard, peeked, hiddenEnemyCards, stared }
   function canUseTrick(id, st) {
     if (!TRICKS[id]) return '알 수 없는 트릭입니다';
     if (st.phase !== 'bet') return '핸드를 확정한 뒤 베팅 중에만 쓸 수 있습니다';
@@ -82,7 +82,11 @@
       if (st.peeked) return '이미 다음 카드를 엿봤습니다';
     }
     if (id === 'mark' && !st.hiddenEnemyCards) return '공개할 상대 카드가 없습니다';
-    if (id === 'stare' && st.stared) return '이번 거리에 이미 노려봤습니다';
+    if (id === 'stare') {
+      if (st.stared) return '이번 거리에 이미 노려봤습니다';
+      if (st.neverFolds) return '이 상대는 폴드하지 않아 노려봐도 소용없습니다';
+      if (st.facingKind === 'raise' || st.facingKind === 'allin') return '상대가 레이즈·올인한 뒤에는 더 올릴 수 없어 쓸 수 없습니다';
+    }
     if (id === 'double' && st.facing) return '상대가 벳한 뒤에는 쓸 수 없습니다';
     return null;
   }
@@ -310,7 +314,7 @@
   }
 
   // 하우스: 리버(다섯 번째 보드 카드)는 쇼다운 전까지 내게 안 보인다
-  const visibleBoard = (enemy, board, ended) => (enemy.rule === 'hiddenCard' && !ended ? board.slice(0, 4) : board);
+  const visibleBoard = (enemy, board) => (enemy.rule === 'hiddenCard' ? board.slice(0, 4) : board);
 
   // 연승 1당 내가 주는 피해 +15%, 최대 +60%
   const STREAK_STEP = 0.15;
@@ -332,13 +336,13 @@
     }
     if (has('ladder') && (cat === 4 || cat === 8)) {
       const ranks = new Set(deck.map((c) => c.r));
-      let run = 0;
+      let run = ranks.has(14) ? 1 : 0; // A 는 낮은 쪽(A-2-3-4-5-6)으로도 센다
       for (let r = 2; r <= 14; r++) { run = ranks.has(r) ? run + 1 : 0; if (run >= 6) return 2; }
     }
     return 1;
   }
 
-  // 쇼다운: 진 쪽이 (족보 값 + 보너스) × 팟 만큼 칩을 잃는다. 방어는 마지막에 뺀다.
+  // 쇼다운: 진 쪽이 (족보 값 + 보너스) × 팟 만큼 칩을 잃는다. 방어를 먼저 빼고, 그 결과에 연승 배수를 곱한다.
   function resolveShowdown({ pres, eres, hole, pot, charms, enemy, deck = [], allin = false, streak = 0 }) {
     const has = (k) => charms.includes(k);
     const count = (en) => hole.filter((c) => c.en === en).length;
@@ -408,8 +412,8 @@
     return { hole: 2, armor: 0, heal: 0, lie: 0, bluff: 0.1, ...e };
   }
 
-  // 카드 합치기: 같은 숫자 두 장 → 숫자 +2(최대 A). 무늬는 먼저 고른 카드, 강화는 먼저 고른 카드 것(없으면 다른 쪽)
-  const mergeableRanks = (deck) => [...new Set(deck.filter((c) => deck.filter((d) => d.r === c.r).length >= 2).map((c) => c.r))];
+  // 카드 합치기: 같은 숫자 두 장 → 숫자 +2(최대 A). A 는 더 올릴 수 없어 합칠 수 없다. 무늬는 먼저 고른 카드, 강화는 먼저 고른 카드 것(없으면 다른 쪽)
+  const mergeableRanks = (deck) => [...new Set(deck.filter((c) => c.r < 14 && deck.filter((d) => d.r === c.r).length >= 2).map((c) => c.r))];
   const mergeCards = (a, b, id) => ({ id, r: Math.min(a.r + 2, 14), s: a.s, en: a.en || b.en || null });
 
   // 보상·상점 카드: 6~A, 층이 깊을수록 강화 확률이 오른다
