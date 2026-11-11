@@ -333,7 +333,7 @@
       <div class="stat gold"><span class="lbl">상금</span><b class="num">${S.gold}</b></div>
       <div class="stat"><span class="lbl">층</span><b class="num">${S.floor}<small>/${AD.FLOORS}</small></b></div>
       <div class="tools">${btn(`덱 ${S.deck.length}`, 'modal', 'deck', 'ghost sm')}${btn('메뉴', 'modal', 'menu', 'ghost sm')}</div>
-      ${S.charms.length ? `<button class="charms" data-act="modal" data-arg="charms" aria-label="유물 ${S.charms.length}개: ${S.charms.map((id) => AD.CHARMS[id].name).join(', ')}">${S.charms.map((id) => `<span class="charm">${AD.CHARMS[id].name}</span>`).join('')}</button>` : ''}
+      ${S.charms.length ? `<button class="charms" data-act="modal" data-arg="charms" aria-label="유물 ${S.charms.length}개: ${S.charms.map((id) => AD.CHARMS[id].name).join(', ')}">${S.charms.map((id) => `<span class="charm" data-tip="${AD.CHARMS[id].name} · ${AD.CHARMS[id].desc}">${V.icon('gem')}${AD.CHARMS[id].name}</span>`).join('')}</button>` : ''}
     </header>`;
   }
 
@@ -415,7 +415,7 @@
     const opt = (key, title, desc) =>
       `<button class="charmcard${pick === key ? ' chosen' : ''}" data-act="restPick" data-arg="${key}" aria-pressed="${pick === key}"><b>${title}</b><span>${desc}</span></button>`;
     const offers = S.rest.offers.map((en) =>
-      opt(en, `<span class="seal seal-${en} inline">${AD.ENCHANTS[en].seal}</span>${AD.ENCHANTS[en].name} 강화`, AD.ENCHANTS[en].desc)).join('');
+      opt(en, `${V.sealHTML(en, ' inline')}${AD.ENCHANTS[en].name} 강화`, AD.ENCHANTS[en].desc)).join('');
     const go = pick === 'rest' ? `쉬기 · 스택 +${heal}` : pick ? (pick === 'rankup' ? '단련할 카드 고르기' : '강화할 카드 고르기') : '결정';
     return `<main class="screen rest">
       <p class="eyebrow">휴게실</p>

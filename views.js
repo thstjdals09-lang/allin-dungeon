@@ -4,6 +4,9 @@
   'use strict';
   const seen = new Set(); // 이미 그린 카드 id — 딜 애니메이션을 한 번만
 
+  const icon = (n, c) => window.icon(n, c);
+  // 강화 토큰: 둥근 색 토큰 + 흰 아이콘. 이름·설명은 data-tip 말풍선
+  const sealHTML = (k, cls = '') => `<span class="seal seal-${k}${cls}" data-tip="${AD.ENCHANTS[k].name} · ${AD.ENCHANTS[k].desc}">${icon(AD.ENCHANTS[k].icon)}</span>`;
   const cardName = (c) => `${AD.SUITS[c.s]}${AD.rankLabel(c.r)}${c.en ? ` (${AD.ENCHANTS[c.en].name})` : ''}`;
 
   // 카드 앞면: 왼쪽 위·오른쪽 아래 모서리 숫자, 가운데는 무늬(그림 카드는 큰 글자)
@@ -16,7 +19,7 @@
     const rank = AD.rankLabel(c.r);
     const suit = AD.SUITS[c.s];
     const idx = (pos) => `<span class="idx ${pos}"><b>${rank}</b><i>${suit}</i></span>`;
-    const en = c.en ? `<span class="seal seal-${c.en}">${AD.ENCHANTS[c.en].seal}</span>` : '';
+    const en = c.en ? sealHTML(c.en) : '';
     const inner = `${idx('tl')}<span class="pip">${court ? rank : suit}</span>${idx('br')}${en}`;
     const label = cardName(c);
     const style = o.style ? ` style="${o.style}"` : '';
@@ -61,7 +64,7 @@
 
   /* ───────── 시트 ───────── */
   const enchantList = () =>
-    `<ul class="enlist">${AD.ENCHANT_IDS.map((k) => `<li><span class="seal seal-${k} inline">${AD.ENCHANTS[k].seal}</span><b>${AD.ENCHANTS[k].name}</b> ${AD.ENCHANTS[k].desc}</li>`).join('')}</ul>`;
+    `<ul class="enlist">${AD.ENCHANT_IDS.map((k) => `<li>${sealHTML(k, ' inline')}<b>${AD.ENCHANTS[k].name}</b> ${AD.ENCHANTS[k].desc}</li>`).join('')}</ul>`;
 
   function howto() {
     return `<h2 class="h">게임 방법</h2>
@@ -91,7 +94,7 @@
     const got = new Set(P.charms);
     const charmIds = Object.keys(AD.CHARMS);
     const enemies = AD.ENEMIES.map((e) => (met.has(e.id)
-      ? `<li><span class="medal sm" aria-hidden="true">${e.glyph}</span><div><b>${e.name}</b><small>${e.floor}층 ${KIND[e.kind]}</small><span>${e.desc}</span></div></li>`
+      ? `<li><span class="medal sm" aria-hidden="true">${icon(e.icon)}</span><div><b>${e.name}</b><small>${e.floor}층 ${KIND[e.kind]}</small><span>${e.desc}</span></div></li>`
       : `<li class="unknown"><span class="medal sm" aria-hidden="true">?</span><div><b>???</b><small>${e.floor}층 ${KIND[e.kind]}</small><span>아직 만나지 못한 상대</span></div></li>`)).join('');
     const charms = charmIds.map((id) => (got.has(id)
       ? `<li><b>${AD.CHARMS[id].name}</b><span>${AD.CHARMS[id].desc}</span></li>`
@@ -167,7 +170,7 @@
       e.rule && [AD.RULES[e.rule].name, AD.RULES[e.rule].desc],
       e.hole === 3 && ['카드 3장', '카드 3장을 받아 그중 좋은 쪽을 쓴다'],
     ].filter(Boolean);
-    return `<div class="who-sheet"><span class="medal" aria-hidden="true">${e.glyph}</span><div><h2 class="h">${e.name}</h2><p class="note">${e.desc}</p></div></div>
+    return `<div class="who-sheet"><span class="medal" aria-hidden="true">${icon(e.icon)}</span><div><h2 class="h">${e.name}</h2><p class="note">${e.desc}</p></div></div>
       ${gloss(traits)}`;
   }
 
@@ -206,7 +209,7 @@
   const DRIFTS = Array.from({ length: 14 }, (_, i) =>
     `<span style="--x:${(i * 37) % 100}%;--d:${11 + ((i * 7) % 9)}s;--delay:-${(i * 13) % 17}s;--s:${18 + ((i * 11) % 28)}px">${AD.SUITS[i % 4]}</span>`).join('');
   const TITLE_FAN = [10, 11, 12, 13, 14].map((r, i) => ({ id: `title-${r}`, r, s: 0, en: null, rot: (i - 2) * 10 }));
-  const MAIN_MENU = [['howto', '게임 방법', '법'], ['codex', '도감', '도'], ['records', '기록', '기'], ['settings', '설정', '설']];
+  const MAIN_MENU = [['howto', '게임 방법', 'book-open'], ['codex', '도감', 'library'], ['records', '기록', 'trophy'], ['settings', '설정', 'settings']];
 
   function title(saved, P, daily) {
     return `<main class="screen title">
@@ -217,9 +220,9 @@
       <nav class="mainmenu" aria-label="메인 메뉴">
         ${saved ? btn(`이어 하기<small>지하 ${saved.floor}층 · 스택 ${saved.hp}</small>`, 'cont', undefined, 'primary big') : ''}
         ${btn('새로 시작', 'start', undefined, saved ? 'ghost big' : 'primary big')}
-        ${btn(`오늘의 도전${daily ? `<small>오늘 기록 · ${daily}</small>` : ''}`, 'daily', undefined, 'ghost big')}
+        ${btn(`<span>${icon('calendar')} 오늘의 도전</span>${daily ? `<small>오늘 기록 · ${daily}</small>` : ''}`, 'daily', undefined, 'ghost big')}
         <div class="mm-grid">${MAIN_MENU.map(([k, label, g]) =>
-          `<button class="mm" data-act="modal" data-arg="${k}"><span class="glyph" aria-hidden="true">${g}</span>${label}</button>`).join('')}</div>
+          `<button class="mm" data-act="modal" data-arg="${k}"><span class="glyph" aria-hidden="true">${icon(g)}</span>${label}</button>`).join('')}</div>
       </nav>
       <p class="foot">${P.runs ? `도전 ${P.runs}번 · 정복 ${P.wins}번 · 가장 깊이 지하 ${P.bestFloor}층` : '진행과 기록은 이 브라우저에만 저장됩니다.'}</p>
     </main>`;
@@ -227,7 +230,7 @@
 
   /* ───────── 층 지도 ───────── */
   // 아래(출발)에서 위(보스)로 올라간다. 좌표는 MAP_W × MAP_H 판 기준, 칸은 그 위에 % 로 올린다.
-  const NODE_GLYPH = { fight: '판', elite: '강', shop: '상', rest: '휴', event: '?', boss: '보' };
+  const NODE_ICON = { fight: 'spade', elite: 'crown', shop: 'store', rest: 'coffee', event: 'circle-help', boss: 'skull' };
   const MAP_W = 300;
   const MAP_H = 460;
   const mapPos = (r, i, n) => ({ x: 30 + ((i + 0.5) / n) * (MAP_W - 60), y: MAP_H - 46 - (r * (MAP_H - 92)) / AD.STEPS });
@@ -261,16 +264,16 @@
       const canGo = r === S.step && open.includes(i);
       const cls = ['mnode', `node-${t}`, visited && 'visited', canGo && 'open', canGo && sel === i && 'picked',
         r < S.step && !visited && 'gone'].filter(Boolean).join(' ');
-      const inner = `<span class="glyph">${NODE_GLYPH[t]}</span><span class="mlabel">${AD.NODES[t].name}</span>`;
+      const inner = `<span class="glyph">${icon(NODE_ICON[t])}</span><span class="mlabel">${AD.NODES[t].name}</span>`;
       const style = `${pct(mapPos(r, i, row.length))};--row:${r}`;
       return canGo
-        ? `<button class="${cls}" style="${style}" data-act="mapSel" data-arg="${i}" aria-pressed="${sel === i}" aria-label="${AD.NODES[t].name}: ${AD.NODES[t].desc}">${inner}</button>`
-        : `<div class="${cls}" style="${style}" aria-hidden="true">${inner}</div>`;
+        ? `<button class="${cls}" style="${style}" data-act="mapSel" data-arg="${i}" data-tip="${AD.NODES[t].name} · ${AD.NODES[t].desc}" aria-pressed="${sel === i}" aria-label="${AD.NODES[t].name}: ${AD.NODES[t].desc}">${inner}</button>`
+        : `<div class="${cls}" style="${style}" data-tip="${AD.NODES[t].name} · ${AD.NODES[t].desc}" aria-hidden="true">${inner}</div>`;
     })).join('');
     const token = here !== null ? `<i class="token" style="${pct(mapPos(S.step - 1, here, rows[S.step - 1].length))}" aria-hidden="true"></i>` : '';
     const t = sel !== null ? rows[S.step][sel] : null;
     const info = t
-      ? `<div class="mapinfo"><span class="glyph" aria-hidden="true">${NODE_GLYPH[t]}</span><div><b>${AD.NODES[t].name}</b><span>${AD.NODES[t].desc}</span></div></div>${btn('들어가기', 'go', sel, 'primary')}`
+      ? `<div class="mapinfo"><span class="glyph" aria-hidden="true">${icon(NODE_ICON[t])}</span><div><b>${AD.NODES[t].name}</b><span>${AD.NODES[t].desc}</span></div></div>${btn('들어가기', 'go', sel, 'primary')}`
       : '<p class="hint">빛나는 칸을 눌러 다음 행선지를 고르세요.</p>';
     const left = AD.STEPS - S.step;
     const boss = S.bossId && AD.ENEMIES.find((x) => x.id === S.bossId);
@@ -291,7 +294,7 @@
     `<div class="modal" role="dialog" aria-modal="true" aria-labelledby="sheet-title"><div class="sheet">${body.replace('<h2 class="h">', '<h2 class="h" id="sheet-title">')}<div class="row">${btn('닫기', 'close', undefined, 'ghost wide')}</div></div></div>`;
 
   window.V = {
-    cardName, cardHTML, backHTML, slotHTML, btn, bar, toggle, KIND,
+    icon, sealHTML, cardName, cardHTML, backHTML, slotHTML, btn, bar, toggle, KIND,
     resetSeen: () => seen.clear(),
     title, map, sheet,
     sheets: { howto, codex, records, settings, menu, charms, enemy, deck },

@@ -237,7 +237,7 @@ window.BATTLE = function (C) {
     const notice = e.rule && b.phase !== 'end' ? `<p class="rule">예고 · ${AD.ruleNotice(e, b.handNo)}</p>` : '';
     const ecards = b.ehole.map((c, i) => (b.shown[i] ? cardHTML(c, { used: b.result && b.result.eused && b.result.eused.includes(c.id) }) : backHTML())).join('');
     return `<section class="enemy ${e.kind}">
-      <button class="medal" data-act="modal" data-arg="enemy" aria-label="${e.name} 특성 보기">${e.glyph}</button>
+      <button class="medal" data-act="modal" data-arg="enemy" data-tip="${e.name} · ${e.desc}" aria-label="${e.name} 특성 보기">${V.icon(e.icon)}</button>
       <div class="who">
         <h2>${e.name} ${kind}</h2>
         <div class="hpline">${bar(e.hp, e.maxHp, 'ehp', 'enemy')}<b class="num">${Math.max(0, e.hp)}<small>/${e.maxHp}</small></b></div>
