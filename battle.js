@@ -202,6 +202,7 @@ window.BATTLE = function (C) {
     b.enemy.hp = Math.min(b.enemy.maxHp, b.enemy.hp - out.toEnemy + out.enemyHeal);
     hurt(out.toPlayer);
     heal(out.heal);
+    if (out.gold) C.S.gold += out.gold;
     C.S.stats.best = Math.max(C.S.stats.best, pres.cat);
     if (out.winner > 0) C.S.stats.won++;
     note({ bestHand: Math.max(C.P.bestHand, pres.cat), bestHit: Math.max(C.P.bestHit, out.toEnemy) });
@@ -271,7 +272,7 @@ window.BATTLE = function (C) {
     if (r.type === 'pfold') return `<p class="result lose">폴드 · 스택 −${r.toPlayer}</p>`;
     if (r.type === 'efold') return `<p class="result win">상대 폴드 · 상대 스택 −${r.toEnemy}</p>`;
     const vs = `내 <b>${r.pdesc}</b> vs 상대 <b>${r.edesc}</b>`;
-    if (r.winner > 0) return `<p class="result win">승리 · ${vs} · 상대 스택 −${r.toEnemy}${r.heal ? ` · 스택 +${r.heal}` : ''}</p>`;
+    if (r.winner > 0) return `<p class="result win">승리 · ${vs} · 상대 스택 −${r.toEnemy}${r.heal ? ` · 스택 +${r.heal}` : ''}${r.gold ? ` · 상금 +${r.gold}` : ''}</p>`;
     if (r.winner < 0) return `<p class="result lose">패배 · ${vs} · 스택 −${r.toPlayer}${r.enemyHeal ? ` · 상대 스택 +${r.enemyHeal}` : ''}</p>`;
     return `<p class="result">스플릿 · 둘 다 <b>${r.pdesc}</b></p>`;
   }

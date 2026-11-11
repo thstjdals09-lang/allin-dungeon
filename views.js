@@ -10,6 +10,10 @@
   // 트릭 토큰: 둥근 아이콘. 이름·설명은 data-tip 말풍선
   const affixToken = (k) => `<span class="tricktoken inline" data-tip="${AD.AFFIXES[k].name} · ${AD.AFFIXES[k].desc}">${icon(AD.AFFIXES[k].icon)}</span>`;
   const trickToken = (k, cls = '') => `<span class="tricktoken${cls}" data-tip="${AD.TRICKS[k].name} · ${AD.TRICKS[k].desc}">${icon(AD.TRICKS[k].icon)}</span>`;
+  // 카드 아래 한 줄 설명: 강화가 있으면 강화, 없으면 숫자대 특성
+  const cardNote = (c) => { const t = AD.rankTrait(c.r); return c.en ? AD.ENCHANTS[c.en].desc : `${t.name} · ${t.desc}`; };
+  const rankTip = (c) => { const t = AD.rankTrait(c.r); return `${t.name} ${t.range} · ${t.desc}`; };
+  const rankList = () => `<ul class="enlist">${AD.RANK_TRAITS.map((t) => `<li><b>${t.name} ${t.range}</b> ${t.desc}</li>`).join('')}</ul>`;
   const cardName = (c) => `${AD.SUITS[c.s]}${AD.rankLabel(c.r)}${c.en ? ` (${AD.ENCHANTS[c.en].name})` : ''}`;
 
   // 카드 앞면: 왼쪽 위·오른쪽 아래 모서리 숫자, 가운데는 무늬(그림 카드는 큰 글자)
@@ -26,8 +30,8 @@
     const inner = `${idx('tl')}<span class="pip">${court ? rank : suit}</span>${idx('br')}${en}`;
     const label = cardName(c);
     const style = o.style ? ` style="${o.style}"` : '';
-    if (!o.act) return `<div class="${cls}"${style} role="img" aria-label="${label}">${inner}</div>`;
-    return `<button class="${cls}"${style} data-act="${o.act}" data-arg="${o.arg ?? c.id}" aria-label="${label}" aria-pressed="${!!o.sel}">${inner}</button>`;
+    if (!o.act) return `<div class="${cls}"${style} data-tip="${rankTip(c)}" role="img" aria-label="${label}">${inner}</div>`;
+    return `<button class="${cls}"${style} data-tip="${rankTip(c)}" data-act="${o.act}" data-arg="${o.arg ?? c.id}" aria-label="${label}" aria-pressed="${!!o.sel}">${inner}</button>`;
   }
   const backHTML = () => '<div class="card back" role="img" aria-label="엎어 둔 카드"></div>';
   const slotHTML = () => '<div class="card slot" aria-hidden="true"></div>';
@@ -91,7 +95,9 @@
       <h3 class="sub">용어</h3>
       ${gloss(GLOSSARY)}
       <h3 class="sub">카드 강화 · 핸드로 쓸 때만 효과</h3>
-      ${enchantList()}`;
+      ${enchantList()}
+      <h3 class="sub">숫자대 특성 · 핸드로 쓸 때만 효과 (장마다)</h3>
+      ${rankList()}`;
   }
 
   const affixList = (ids = AD.AFFIX_IDS) => `<ul class="enlist">${ids.map((k) => `<li>${affixToken(k)}<b>${AD.AFFIXES[k].name}</b> ${AD.AFFIXES[k].desc}</li>`).join('')}</ul>`;
@@ -302,12 +308,12 @@
 
   // 시트 틀: 제목에 id 를 붙여 대화상자 이름으로 쓴다
   const sheet = (body) =>
-    `<div class="modal" role="dialog" aria-modal="true" aria-labelledby="sheet-title"><div class="sheet">${body.replace('<h2 class="h">', '<h2 class="h" id="sheet-title">')}<div class="row">${btn('닫기', 'close', undefined, 'ghost wide')}</div></div></div>`;
+    `<div class="modal" data-act="close" role="dialog" aria-modal="true" aria-labelledby="sheet-title"><div class="sheet">${body.replace('<h2 class="h">', '<h2 class="h" id="sheet-title">')}<div class="row">${btn('닫기', 'close', undefined, 'ghost wide')}</div></div></div>`;
 
   window.V = {
     icon, sealHTML, cardName, cardHTML, backHTML, slotHTML, btn, bar, toggle, KIND,
     resetSeen: () => seen.clear(),
-    title, map, sheet,
+    title, map, sheet, cardNote,
     trickToken,
     sheets: { howto, codex, records, settings, menu, charms, enemy, deck },
   };

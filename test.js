@@ -50,9 +50,13 @@ const hole = [{ r: 14, s: 1, en: 'fire' }, { r: 13, s: 1, en: 'steel' }];
 const flush = best('2h 7h 9h Jh Kh 3c 4d');
 const pair = best('9s 9h 2d 3c 5s Kd Qh');
 let out = AD.resolveShowdown({ pres: flush, eres: pair, hole, pot: 2, charms: ['tattoo'], enemy });
-assert.deepStrictEqual(out, { winner: 1, toEnemy: (12 + 4 + 10) * 2 - 2, toPlayer: 0, heal: 0, enemyHeal: 0 });
+assert.deepStrictEqual(out, { winner: 1, toEnemy: (12 + 4 + 10) * 2 - 2, toPlayer: 0, heal: 2, enemyHeal: 0, gold: 2 }); // A 스택 +2, K 상금 +2
 out = AD.resolveShowdown({ pres: pair, eres: flush, hole, pot: 3, charms: ['ironchip'], enemy });
-assert.deepStrictEqual(out, { winner: -1, toEnemy: 0, toPlayer: Math.round(12 * 3 * 1.5) - 4 - 2, heal: 0, enemyHeal: 4 });
+assert.deepStrictEqual(out, { winner: -1, toEnemy: 0, toPlayer: Math.round(12 * 3 * 1.5) - 4 - 2, heal: 0, enemyHeal: 4, gold: 0 });
+// 숫자대 특성: 로우는 이기면 족보 값 +2, 미들은 지면 −2 (장마다)
+assert.strictEqual(AD.resolveShowdown({ pres: flush, eres: pair, hole: [{ r: 2, s: 1 }, { r: 5, s: 1 }], pot: 2, charms: [], enemy }).toEnemy, (12 + 4) * 2 - 2);
+assert.strictEqual(AD.resolveShowdown({ pres: pair, eres: flush, hole: [{ r: 6, s: 1 }, { r: 9, s: 1 }], pot: 3, charms: [], enemy }).toPlayer, Math.round(12 * 3 * 1.5) - 4);
+for (let r = 2; r <= 14; r++) assert.ok(AD.rankTrait(r), '모든 숫자에 특성');
 out = AD.resolveShowdown({ pres: pair, eres: pair, hole, pot: 3, charms: [], enemy });
 assert.strictEqual(out.winner, 0, '스플릿은 아무도 안 잃음');
 out = AD.resolveShowdown({ pres: best('9s 8h 2d 3c 5s Kd Qh'), eres: best('9s 8h 2d 3c 4s Kd Jh'), hole: [], pot: 1, charms: [], enemy: { mul: 1, armor: 9 } });

@@ -326,6 +326,7 @@
   app.addEventListener('click', (ev) => {
     const el = ev.target.closest('[data-act]');
     if (!el || el.disabled) return;
+    if (el.classList.contains('modal') && ev.target !== el) return; // 시트 밖 어두운 배경을 눌렀을 때만 닫는다
     ui.toast = '';
     ui.from = el.getBoundingClientRect();
     ACT[el.dataset.act](el.dataset.arg);
@@ -372,7 +373,7 @@
     const r = S.reward;
     const cards = r.cards.map((c, i) => `<div class="offer${r.cardPick === i ? ' picked' : ''}">
         ${cardHTML(c, { act: 'takeCard', arg: i, sel: r.cardPick === i })}
-        <small>${c.en ? AD.ENCHANTS[c.en].desc : '강화 없음'}</small>
+        <small>${V.cardNote(c)}</small>
         ${sameRank(c, false)}
       </div>`).join('');
     const charms = r.charms.length
@@ -398,7 +399,7 @@
     const pool = pk.kind === 'trick' ? AD.TRICKS : AD.CHARMS;
     const name = isCard ? cardName(item.card) : pool[item.id].name;
     const desc = isCard
-      ? `${item.card.en ? AD.ENCHANTS[item.card.en].desc : '강화 없음'} · 넣으면 ${AD.rankLabel(item.card.r)} ${S.deck.filter((d) => d.r === item.card.r).length + 1}장`
+      ? `${V.cardNote(item.card)} · 넣으면 ${AD.rankLabel(item.card.r)} ${S.deck.filter((d) => d.r === item.card.r).length + 1}장`
       : pool[item.id].desc;
     const short = item.price - S.gold;
     const buyBtn = short > 0
@@ -413,7 +414,7 @@
     const pk = ui.shopPick;
     const cards = sh.cards.map((x, i) => `<div class="offer${x.sold ? ' taken' : ''}${pk && pk.kind === 'card' && pk.i === i ? ' picked' : ''}">
         ${cardHTML(x.card, x.sold ? {} : { act: 'buyCard', arg: i, sel: !!pk && pk.kind === 'card' && pk.i === i })}
-        <small>${x.card.en ? AD.ENCHANTS[x.card.en].desc : '강화 없음'}</small>
+        <small>${V.cardNote(x.card)}</small>
         ${sameRank(x.card, x.sold)}
         <b class="price num">${x.sold ? '구매함' : `${x.price}`}</b>
       </div>`).join('');

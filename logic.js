@@ -33,6 +33,15 @@
   };
   const ENCHANT_IDS = Object.keys(ENCHANTS);
 
+  // 숫자대 특성: 강화와 따로, 숫자만 보고 붙는다. 핸드로 쓴 카드에만 든다(장마다).
+  const RANK_TRAITS = [
+    { id: 'low', from: 2, to: 5, name: '로우', range: '2–5', desc: '핸드로 쓰고 이기면 족보 값 +2' },
+    { id: 'mid', from: 6, to: 9, name: '미들', range: '6–9', desc: '핸드로 쓰고 지면 잃는 칩 −2' },
+    { id: 'high', from: 10, to: 13, name: '하이', range: '10–K', desc: '핸드로 쓰고 이기면 상금 +2' },
+    { id: 'ace', from: 14, to: 14, name: '에이스', range: 'A', desc: '핸드로 쓰고 이기면 스택 +2' },
+  ];
+  const rankTrait = (r) => RANK_TRAITS.find((t) => r >= t.from && r <= t.to);
+
   const CHARMS = {
     coin: { name: '행운의 동전', desc: '판마다 체인지 +1' },
     sleeve: { name: '넓은 소매', desc: '손패를 6장 받는다' },
@@ -346,9 +355,10 @@
   function resolveShowdown({ pres, eres, hole, pot, charms, enemy, deck = [], allin = false, streak = 0 }) {
     const has = (k) => charms.includes(k);
     const count = (en) => hole.filter((c) => c.en === en).length;
-    const out = { winner: 0, toEnemy: 0, toPlayer: 0, heal: 0, enemyHeal: 0 };
+    const band = (id) => hole.filter((c) => rankTrait(c.r).id === id).length;
+    const out = { winner: 0, toEnemy: 0, toPlayer: 0, heal: 0, enemyHeal: 0, gold: 0 };
     if (pres.score > eres.score) {
-      let base = HANDS[pres.cat].value * deckMult(pres.cat, deck, has) + (isRoyal(pres) ? ROYAL_BONUS : 0) + 4 * count('fire');
+      let base = HANDS[pres.cat].value * deckMult(pres.cat, deck, has) + (isRoyal(pres) ? ROYAL_BONUS : 0) + 4 * count('fire') + 2 * band('low');
       if (has('slim') && deck.length <= 14) base += 4;
       if (has('junkie') && allin) base += 12;
       if (has('fry') && pres.cat <= 1) base += 6;
@@ -357,10 +367,11 @@
       const raw = Math.round(base * pot * (has('pact') ? 1.3 : 1));
       out.winner = 1;
       out.toEnemy = Math.max(1, Math.round(Math.max(1, raw - (enemy.armor || 0)) * streakMult(streak)));
-      out.heal = 3 * count('blood');
+      out.heal = 3 * count('blood') + 2 * band('ace');
+      out.gold = 2 * band('high');
     } else if (pres.score < eres.score) {
       const raw = Math.round((HANDS[eres.cat].value + (enemy.valueBonus || 0)) * pot * enemy.mul);
-      const block = 4 * count('steel') + (has('ironchip') ? 2 : 0);
+      const block = 4 * count('steel') + 2 * band('mid') + (has('ironchip') ? 2 : 0);
       out.winner = -1;
       out.toPlayer = Math.max(0, raw + (has('junkie') && allin ? 4 : 0) - block);
       out.enemyHeal = enemy.heal || 0;
@@ -474,7 +485,7 @@
   }
 
   const api = {
-    SUITS, rankLabel, HANDS, ROYAL_BONUS, ANTE, ALLIN_ADD, ENCHANTS, ENCHANT_IDS, CHARMS, TRICKS, TRICK_IDS, MAX_TRICKS, STARE_BOOST, trickRoom, rewardTrick, shopTricks, canUseTrick, ENEMIES, NODES, STEPS, FLOORS, TELLS, RULES,
+    SUITS, rankLabel, HANDS, ROYAL_BONUS, ANTE, ALLIN_ADD, ENCHANTS, ENCHANT_IDS, RANK_TRAITS, rankTrait, CHARMS, TRICKS, TRICK_IDS, MAX_TRICKS, STARE_BOOST, trickRoom, rewardTrick, shopTricks, canUseTrick, ENEMIES, NODES, STEPS, FLOORS, TELLS, RULES,
     seedNext, seedFromDate, shuffle, pick, starterDeck, tableDeck, eval5, best, isRoyal, describe, strength, tellOf, enemyFolds, enemyAct,
     isForcedAllin, ruleNotice, rigCard, equityAtFlop, reviewVerdict, visibleBoard, foldDamage, streakMult, STREAK_STEP, STREAK_MAX, AFFIXES, AFFIX_IDS, affixCount, rollAffixes, applyAffixes, resolveShowdown, pickEnemy, mergeableRanks, mergeCards, randomCard, randomCharms, genFloorMap, choicesAt, migrateSave,
   };
