@@ -31,7 +31,7 @@
   const toast = (msg) => { ui.toast = msg; };
 
   /* ───────── 기록·도감 (판을 넘어 남는 것) ───────── */
-  const EMPTY_PROFILE = { runs: 0, wins: 0, bestFloor: 0, kills: 0, bestHand: -1, bestHit: 0, enemies: [], charms: [], charWins: {}, maxLevel: 0, daily: {} };
+  const EMPTY_PROFILE = { runs: 0, wins: 0, bestFloor: 0, kills: 0, bestHand: -1, bestHit: 0, regretFolds: 0, reckless: 0, enemies: [], charms: [], charWins: {}, maxLevel: 0, daily: {} };
   function loadProfile() {
     try { return { ...EMPTY_PROFILE, ...JSON.parse(localStorage.getItem(PROFILE_KEY) || '{}') }; } catch (e) { return { ...EMPTY_PROFILE }; }
   }

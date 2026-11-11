@@ -212,6 +212,32 @@ assert.strictEqual(AD.pickEnemy(1, 'normal').bluff >= 0.1, true);
   assert.strictEqual(META.betterDaily(undefined, lose), lose);
   assert.strictEqual(META.todayKey(new Date(2026, 10, 5)), '20261105');
 }
+
+// 복기: 플롭 승률(완전 열거)
+{
+  const C = (str) => str.split(' ').map((t, i) => ({ id: `t1-${'♠♥♦♣'.indexOf(t[1])}-${{ T: 10, J: 11, Q: 12, K: 13, A: 14 }[t[0]] || +t[0]}`, r: { T: 10, J: 11, Q: 12, K: 13, A: 14 }[t[0]] || +t[0], s: '♠♥♦♣'.indexOf(t[1]), en: null }));
+  // 이미 이김: 내 A 로열 플러시 완성 vs 상대 쓰레기 → 100%
+  let q = AD.equityAtFlop(C('Q♠ K♠'), C('2♥ 3♦'), C('A♠ J♠ T♠'), []);
+  assert.strictEqual(q.lose, 0); assert.strictEqual(Math.round((q.win + q.tie / 2) * 100), 100);
+  // 희망 없음: 상대는 이미 로열 플러시, 나는 하이카드 → 0% (같은 로열은 나올 수 없게 무늬 겹침 없음)
+  q = AD.equityAtFlop(C('2♣ 3♣'), C('Q♠ K♠'), C('A♠ J♠ T♠'), []);
+  assert.strictEqual(q.win, 0); assert.strictEqual(q.lose, 1);
+  // 비김: 보드가 로열 플러시라 둘 다 보드 5장을 쓴다
+  q = AD.equityAtFlop(C('2♣ 3♦'), C('4♣ 5♦'), C('A♠ K♠ Q♠'), []);
+  assert.ok(Math.abs(q.win + q.tie + q.lose - 1) < 1e-9);
+  const royal = AD.equityAtFlop(C('2♣ 3♦'), C('4♣ 5♦'), C('A♠ K♠ Q♠'), []);
+  assert.ok(royal.tie > 0);
+  // deadIds 로 나간 카드를 빼면 가짓수가 줄고 합은 여전히 1
+  const dead = AD.equityAtFlop(C('Q♠ K♠'), C('2♥ 3♦'), C('A♠ J♠ T♠'), ['t9-0-9']);
+  assert.ok(Math.abs(dead.win + dead.tie + dead.lose - 1) < 1e-9);
+  // 한 줄 평
+  assert.strictEqual(AD.reviewVerdict('pfold', 50, true), 'regret');
+  assert.strictEqual(AD.reviewVerdict('pfold', 49, true), null);
+  assert.strictEqual(AD.reviewVerdict('show', 24, true), 'reckless');
+  assert.strictEqual(AD.reviewVerdict('show', 24, false), null);
+  assert.strictEqual(AD.reviewVerdict('show', 25, true), null);
+  assert.strictEqual(AD.reviewVerdict('efold', 10, true), null);
+}
 console.log('logic 테스트 통과');
 
 if (process.argv.includes('--sim')) sim();
@@ -248,20 +274,30 @@ function fight(enemy, deck) {
     const hand = draw.slice(0, 5); draw = draw.slice(5); discard.push(...hand);
     const table = AD.shuffle(AD.tableDeck(hands));
     const ehole = table.slice(0, enemy.hole);
-    const full = table.slice(enemy.hole, enemy.hole + 5);
-    const flop = full.slice(0, 3);
+    let flop = table.slice(enemy.hole, enemy.hole + 3);
+    let rest = table.slice(enemy.hole + 3);
     let hole = null, mine = null;
     for (let i = 0; i < hand.length; i++) for (let j = i + 1; j < hand.length; j++) {
       const r = AD.best([hand[i], hand[j], ...flop]);
       if (!mine || r.score > mine.score) { mine = r; hole = [hand[i], hand[j]]; }
     }
     hands++;
-    let pot = 1, folded = 0;
+    // 보드 규칙은 핸드를 정한 직후 같은 도우미로 적용
+    const put = (i, card) => { flop = flop.map((c, k) => (k === i ? card : c)); rest = rest.filter((c) => c.id !== card.id); };
+    if (enemy.rule === 'rigBoard') { const rig = AD.rigCard(ehole, flop, rest.slice(0, 3)); if (rig) put(rig.index, rig.card); }
+    else if (enemy.rule === 'swapRandom') put(Math.floor(Math.random() * 3), rest[0]);
+    const full = [...flop, ...rest.slice(0, 2)];
+    let pot = enemy.rule === 'bigPot' ? 2 : 1, folded = 0;
     // 내 패가 원페어 이상이면 콜, 아니면 텔이 '여유'면 폴드, 그 밖엔 콜. 폴드하면 상대가 올리기 전 팟만큼 잃는다
     const respond = (me, v, before) => {
       if (me.cat === 0 && AD.tellOf(enemy, v) === 2) { folded = -1; pot = before; }
     };
-    for (let street = 3; street <= 5 && !folded; street++) {
+    let forced = false;
+    if (AD.isForcedAllin(enemy, hands)) { // 곰: 플롭에서 올인. 봇은 원페어 이상이면 콜, 아니면 폴드
+      const me = AD.best([...hole, ...flop]);
+      if (me.cat >= 1) { pot += AD.ALLIN_ADD; forced = true; } else { folded = -1; }
+    }
+    for (let street = 3; street <= 5 && !folded && !forced; street++) {
       const board = full.slice(0, street);
       const me = AD.best([...hole, ...board]);
       const v = AD.strength(ehole, board);

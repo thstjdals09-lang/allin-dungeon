@@ -77,7 +77,7 @@
     { id: 'ghost', floor: 3, kind: 'normal', name: '유령 손님', glyph: '령', hp: 40, mul: 1.4, tight: 0.9, poker: true, desc: '얼굴이 없어 텔도 없다.' },
     { id: 'banker', floor: 3, kind: 'normal', name: '금고지기', glyph: '금', hp: 44, mul: 1.3, tight: 0.9, lie: 0.2, armor: 3, desc: '져도 칩을 많이 덜 잃는다.' },
     { id: 'shark', floor: 3, kind: 'elite', name: '큰손', glyph: '큰', hp: 58, mul: 1.2, tight: 0.6, lie: 0.3, hole: 3, armor: 1, rule: 'bigPot', desc: '큰 팟을 좋아한다.' },
-    { id: 'house', floor: 3, kind: 'boss', name: '하우스의 주인', glyph: '주', hp: 110, mul: 1.3, tight: 0, poker: true, hole: 3, armor: 2, bluff: 0.15, rule: 'hiddenCard', desc: '폴드하지 않는다. 텔도 없다.' },
+    { id: 'house', floor: 3, kind: 'boss', name: '하우스의 주인', glyph: '주', hp: 85, mul: 1.3, tight: 0, poker: true, hole: 3, armor: 2, bluff: 0.15, rule: 'hiddenCard', desc: '폴드하지 않는다. 텔도 없다.' },
   ];
 
   // 보스·하이롤러 고유 규칙. notice 는 판이 시작될 때 상대 패널에 뜨는 예고
@@ -254,6 +254,30 @@
     return top;
   }
 
+  // 복기: 플롭 때 내 승률. 남은 52장 덱(상대 핸드·플롭·이미 나간 카드 deadIds 제외)에서 턴·리버 2장을 전부 세어 {win, tie, lose}.
+  // deadIds 는 테이블 카드의 id(…-무늬-숫자). 내 핸드는 내 덱에서 온 별개의 카드라 테이블 덱에서 빼지 않는다.
+  function equityAtFlop(hole, ehole, flop, deadIds = []) {
+    const key = (c) => `${c.s}-${c.r}`;
+    const out = new Set([...ehole, ...flop].map(key));
+    deadIds.forEach((id) => { const m = /-(\d)-(\d+)$/.exec(id); if (m) out.add(`${m[1]}-${m[2]}`); });
+    const rest = tableDeck('eq').filter((c) => !out.has(key(c)));
+    let win = 0, tie = 0, lose = 0;
+    for (let i = 0; i < rest.length; i++) for (let j = i + 1; j < rest.length; j++) {
+      const board = [...flop, rest[i], rest[j]];
+      const d = best([...hole, ...board]).score - best([...ehole, ...board]).score;
+      if (d > 0) win++; else if (d < 0) lose++; else tie++;
+    }
+    const n = win + tie + lose;
+    return { win: win / n, tie: tie / n, lose: lose / n };
+  }
+
+  // 한 줄 평: 폴드했는데 승률 ≥ 50% → regret, 끝까지 베팅·콜로 쇼다운에 가서 승률 < 25% → reckless
+  function reviewVerdict(type, pct, committed) {
+    if (type === 'pfold' && pct >= 50) return 'regret';
+    if (type === 'show' && committed && pct < 25) return 'reckless';
+    return null;
+  }
+
   // 하우스: 리버(다섯 번째 보드 카드)는 쇼다운 전까지 내게 안 보인다
   const visibleBoard = (enemy, board, ended) => (enemy.rule === 'hiddenCard' && !ended ? board.slice(0, 4) : board);
 
@@ -373,7 +397,7 @@
   const api = {
     SUITS, rankLabel, HANDS, ROYAL_BONUS, ANTE, ALLIN_ADD, ENCHANTS, ENCHANT_IDS, CHARMS, ENEMIES, NODES, STEPS, FLOORS, TELLS, RULES,
     seedNext, seedFromDate, shuffle, pick, starterDeck, tableDeck, eval5, best, isRoyal, describe, strength, tellOf, enemyFolds, enemyAct,
-    isForcedAllin, ruleNotice, rigCard, visibleBoard, foldDamage, resolveShowdown, pickEnemy, mergeableRanks, mergeCards, randomCard, randomCharms, genFloorMap, choicesAt, migrateSave,
+    isForcedAllin, ruleNotice, rigCard, equityAtFlop, reviewVerdict, visibleBoard, foldDamage, resolveShowdown, pickEnemy, mergeableRanks, mergeCards, randomCard, randomCharms, genFloorMap, choicesAt, migrateSave,
   };
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
   else root.AD = api;

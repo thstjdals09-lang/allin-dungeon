@@ -110,6 +110,7 @@
       ['이긴 매치', `${P.kills}번`],
       ['최고 족보', P.bestHand >= 0 ? AD.HANDS[P.bestHand].name : '없음'],
       ['한 판 최대 피해', P.bestHit ? `${P.bestHit}` : '없음'],
+      ['복기', `아까운 폴드 ${P.regretFolds || 0}번 · 무리한 승부 ${P.reckless || 0}번`],
       ['최고 난이도', `${P.maxLevel}`],
       ...META.CHARACTERS.map((c) => [`${c.name} 정복`, `${(P.charWins || {})[c.id] || 0}번`]),
     ];

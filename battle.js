@@ -73,6 +73,8 @@ window.BATTLE = function (C) {
     b.result = null;
     b.facing = null;
     b.allin = false;
+    b.committed = false;
+    b.flop = null;
     b.phase = 'pick';
     ui.swap = false;
     readEnemy(b);
@@ -80,8 +82,19 @@ window.BATTLE = function (C) {
     if (b.enemy.rule === 'stealChange') log(`${iga(b.enemy.name)} 체인지 1개를 빼앗았다`);
   }
 
+  // 복기: 플롭 때 승률(완전 열거)을 판이 끝날 때 한 번만 계산해 결과에 붙인다
+  function review(b, result) {
+    if (!b.flop) return result;
+    const q = AD.equityAtFlop(b.hole, b.ehole, b.flop, b.dead);
+    const eq = Math.round((q.win + q.tie / 2) * 100);
+    const verdict = AD.reviewVerdict(result.type, eq, b.committed);
+    if (verdict === 'regret') note({ regretFolds: (C.P.regretFolds || 0) + 1 });
+    if (verdict === 'reckless') note({ reckless: (C.P.reckless || 0) + 1 });
+    return { ...result, eq, verdict };
+  }
+
   function endHand(b, result, msg) {
-    b.result = result;
+    b.result = review(b, result);
     b.facing = null;
     b.phase = 'end';
     ui.swap = false;
@@ -111,6 +124,7 @@ window.BATTLE = function (C) {
   function raise(b, add, allin, word = '벳', canReraise = true) {
     const before = b.pot;
     b.pot += add;
+    b.committed = true;
     fx({ t: 'chip', allin });
     const where = `${STREETS[b.street]}${b.facing ? ` 상대 ${b.facing.kind === 'bet' ? '벳' : '레이즈'} →` : ''} ${allin ? '올인' : word}`;
     const act = AD.enemyAct(b.enemy, b.str, allin ? 'allin' : canReraise ? 'bet' : 'raise', rnd, has('face') ? 1.25 : 1);
@@ -145,6 +159,7 @@ window.BATTLE = function (C) {
   function applyLockRules(b) {
     const e = b.enemy;
     const put = (index, card) => {
+      b.dead = [...b.dead, b.board[index].id]; // 바뀐 플롭 카드는 이미 나간 카드
       b.board = b.board.map((c, k) => (k === index ? card : c));
       b.table = b.table.filter((c) => c.id !== card.id);
       readEnemy(b);
@@ -155,7 +170,8 @@ window.BATTLE = function (C) {
     } else if (e.rule === 'swapRandom') {
       put(AD.pick(b.board.map((_, i) => i), rnd), b.table[0]);
       log(`${iga(e.name)} 보드 1장을 바꿨다`);
-    } else if (AD.isForcedAllin(e, b.handNo)) {
+    }
+    if (AD.isForcedAllin(e, b.handNo)) {
       const before = b.pot;
       b.pot += AD.ALLIN_ADD;
       b.facing = { kind: 'allin', before };
@@ -242,6 +258,9 @@ window.BATTLE = function (C) {
     if (r.winner < 0) return `<p class="result lose">패배 · ${vs} · 스택 −${r.toPlayer}${r.enemyHeal ? ` · 상대 스택 +${r.enemyHeal}` : ''}</p>`;
     return `<p class="result">스플릿 · 둘 다 <b>${r.pdesc}</b></p>`;
   }
+
+  const VERDICT = { regret: '폴드가 아까웠다', reckless: '무리했다' };
+  const reviewLine = (r) => (r.eq === undefined ? '' : `<p class="review">플롭 승률 ${r.eq}%${r.verdict ? ` · ${VERDICT[r.verdict]}` : ''}</p>`);
 
   function battleActions(b) {
     if (b.phase === 'pick') {
@@ -334,7 +353,7 @@ window.BATTLE = function (C) {
         <div class="cards">${board}</div>
       </section>
       <div class="bottom">
-        ${b.phase === 'end' ? resultLine(b) : `<p class="hint">${hint}</p>`}
+        ${b.phase === 'end' ? resultLine(b) + reviewLine(b.result) : `<p class="hint">${hint}</p>`}
         ${status}
         <section class="hand" aria-label="내 손패"><div class="cards${sorted.length > 5 ? ' six' : ''}">${hand}</div></section>
       </div>
@@ -369,7 +388,9 @@ window.BATTLE = function (C) {
       b.hole.filter((c) => c.en === 'eye').forEach(() => reveal(b));
       b.phase = 'bet';
       fx({ t: 'lock' });
+      b.dead = [];
       applyLockRules(b);
+      b.flop = b.board.slice(0, 3); // 내가 실제로 맞선 플롭
     },
     check() {
       const b = C.S.battle;
@@ -382,6 +403,7 @@ window.BATTLE = function (C) {
     },
     call() {
       const b = C.S.battle;
+      b.committed = true;
       if (b.facing.kind === 'allin') { log(`플롭 강제 올인 → 콜 · 팟 ×${b.pot}`); fx({ t: 'cutin', text: '올인 콜' }); return runOut(b); }
       log(`${STREETS[b.street]} 상대 ${b.facing.kind === 'bet' ? '벳' : '레이즈'} → 콜 · 팟 ×${b.pot}`); fx({ t: 'check' }); nextStreet(b); },
     bet() { raise(C.S.battle, 1, false); },
