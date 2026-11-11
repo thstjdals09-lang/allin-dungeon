@@ -1,4 +1,5 @@
-/* 올인 던전 — 진행과 화면. 규칙은 logic.js 의 전역 AD. */
+/* 올인 던전 — 진행과 화면. 규칙은 logic.js 의 전역 AD, 연출은 fx.js 의 FX.
+   800줄을 조금 넘는 이유: 상태 S·ui 를 이 클로저 하나가 쥐고 있어서 화면 함수를 떼어 내면 내부를 전역으로 열어야 한다. */
 (function () {
   'use strict';
   const VERSION = 2; // v1 은 베팅이 플롭 한 번뿐이라 저장 형식이 다르다
@@ -409,9 +410,15 @@
     },
     modal(name) { ui.modal = { type: name }; },
     close() { ui.modal = null; },
-    charm(id) { toast(`${AD.CHARMS[id].name} · ${AD.CHARMS[id].desc}`); },
     again() { S = null; },
     sound() { if (window.FX) FX.toggleSound(); },
+    fast() { if (window.FX) FX.toggleFast(); },
+    quitAsk() { ui.modal = { type: 'menu', confirm: true }; },
+    quit() {
+      try { localStorage.removeItem(SAVE_KEY); } catch (e) { /* 저장이 막힌 브라우저: 지울 저장도 없다 */ }
+      S = null;
+      ui.modal = null;
+    },
   };
 
   app.addEventListener('click', (ev) => {
@@ -457,16 +464,12 @@
   }
 
   function topbar() {
-    const muted = window.FX ? FX.muted : true;
-    const sound = window.FX
-      ? `<button class="btn ghost sm snd${muted ? ' off' : ''}" data-act="sound" aria-label="효과음 ${muted ? '켜기' : '끄기'}" aria-pressed="${!muted}">♪</button>`
-      : '';
     return `<header class="top">
       <div class="stat stack"><span class="lbl">스택</span><b class="num">${S.hp}<small>/${S.maxHp}</small></b>${bar(S.hp, S.maxHp, 'hp', 'me')}</div>
       <div class="stat gold"><span class="lbl">상금</span><b class="num">${S.gold}</b></div>
       <div class="stat"><span class="lbl">층</span><b class="num">${S.floor}<small>/${AD.FLOORS}</small></b></div>
-      <div class="tools">${btn(`덱 ${S.deck.length}`, 'modal', 'deck', 'ghost sm')}${btn('규칙', 'modal', 'rules', 'ghost sm')}${sound}</div>
-      ${S.charms.length ? `<div class="charms" aria-label="유물">${S.charms.map((id) => `<button class="charm" data-act="charm" data-arg="${id}">${AD.CHARMS[id].name}</button>`).join('')}</div>` : ''}
+      <div class="tools">${btn(`덱 ${S.deck.length}`, 'modal', 'deck', 'ghost sm')}${btn('메뉴', 'modal', 'menu', 'ghost sm')}</div>
+      ${S.charms.length ? `<button class="charms" data-act="modal" data-arg="charms" aria-label="유물 ${S.charms.length}개 보기">${S.charms.map((id) => `<span class="charm">${AD.CHARMS[id].name}</span>`).join('')}</button>` : ''}
     </header>`;
   }
 
@@ -524,7 +527,7 @@
     }
     const ecards = b.ehole.map((c, i) => (b.shown[i] ? cardHTML(c, { used: b.result && b.result.eused && b.result.eused.includes(c.id) }) : backHTML())).join('');
     return `<section class="enemy ${e.kind}">
-      <div class="medal" aria-hidden="true">${e.glyph}</div>
+      <button class="medal" data-act="modal" data-arg="enemy" aria-label="${e.name} 특성 보기">${e.glyph}</button>
       <div class="who">
         <h2>${e.name} ${kind}</h2>
         <div class="hpline">${bar(e.hp, e.maxHp, 'ehp', 'enemy')}<b class="num">${Math.max(0, e.hp)}<small>/${e.maxHp}</small></b></div>
@@ -554,15 +557,30 @@
     if (b.phase === 'bet') {
       const foldCost = has('shoes') ? 0 : AD.foldDamage(b.pot);
       const allinAdd = AD.ALLIN_ADD + (has('ring') ? 1 : 0);
+      // 칩 아래 숫자는 누른 뒤의 팟 — 무엇이 바뀌는지 미리 보이게
       return `<div class="chips">
-        <button class="chip fold" data-act="fold"><b>폴드</b><span>−${foldCost}</span></button>
-        <button class="chip c1" data-act="check"><b>체크</b><span>팟 그대로</span></button>
-        <button class="chip c2" data-act="bet"><b>벳</b><span>팟 +1</span></button>
-        <button class="chip c3" data-act="allin"><b>올인</b><span>팟 +${allinAdd}</span></button>
+        <button class="chip fold" data-act="fold" aria-label="폴드, 스택 ${foldCost} 잃음"><b>폴드</b><span>스택 −${foldCost}</span></button>
+        <button class="chip c1" data-act="check" aria-label="체크, 팟 ${b.pot}배 그대로"><b>체크</b><span>팟 ×${b.pot}</span></button>
+        <button class="chip c2" data-act="bet" aria-label="벳, 팟 ${b.pot + 1}배"><b>벳</b><span>팟 ×${b.pot + 1}</span></button>
+        <button class="chip c3" data-act="allin" aria-label="올인, 팟 ${b.pot + allinAdd}배, 바로 쇼다운"><b>올인</b><span>팟 ×${b.pot + allinAdd}</span></button>
       </div>`;
     }
     const label = S.hp <= 0 ? '결과 보기' : b.enemy.hp <= 0 ? '보상 받기' : '다음 판';
     return btn(label, 'next', undefined, 'primary wide');
+  }
+
+  // 판 진행 단계: 핸드 → 플롭 → 턴 → 리버 → 쇼다운(폴드로 끝나면 폴드)
+  function stepper(b) {
+    const at = b.phase === 'pick' ? 0 : b.phase === 'bet' ? 1 + b.street : 4;
+    const folded = b.result && b.result.type !== 'show';
+    const steps = ['핸드', '플롭', '턴', '리버', folded ? '폴드' : '쇼다운'];
+    return `<ol class="stepper" aria-label="진행 단계">${steps.map((s, i) =>
+      `<li class="${i < at ? 'done' : i === at ? 'now' : ''}"${i === at ? ' aria-current="step"' : ''}>${s}</li>`).join('')}</ol>`;
+  }
+
+  // 지금 패 그대로 이기면 상대가 잃을 칩 — 규칙 엔진의 계산을 그대로 쓴다
+  function winIfNow(b, hole, pres) {
+    return AD.resolveShowdown({ pres, eres: { score: -1, cat: 0 }, hole, pot: b.pot, charms: S.charms, enemy: b.enemy }).toEnemy;
   }
 
   function vBattle() {
@@ -572,21 +590,27 @@
       ...b.board.map((c, i) => cardHTML(c, ui.swap ? { act: 'swap', arg: i, swap: true } : { used: used.includes(c.id) })),
       ...Array(5 - b.board.length).fill(slotHTML()),
     ].join('');
+    // 손패는 높은 숫자부터, 손에 쥔 것처럼 살짝 부채꼴로
     const inHole = (c) => b.hole.some((h) => h.id === c.id);
-    const hand = b.hand.map((c) => (b.phase === 'pick'
-      ? cardHTML(c, { act: 'sel', sel: b.sel.includes(c.id) })
-      : cardHTML(c, { sel: inHole(c), dim: !inHole(c), used: used.includes(c.id) }))).join('');
+    const sorted = b.hand.slice().sort((x, y) => y.r - x.r || x.s - y.s);
+    const mid = (sorted.length - 1) / 2;
+    const fan = (i) => `--r:${((i - mid) * 3).toFixed(1)}deg;--y:${(Math.abs(i - mid) * 3).toFixed(1)}px`;
+    const hand = sorted.map((c, i) => (b.phase === 'pick'
+      ? cardHTML(c, { act: 'sel', sel: b.sel.includes(c.id), style: fan(i) })
+      : cardHTML(c, { sel: inHole(c), dim: !inHole(c), used: used.includes(c.id), style: fan(i) }))).join('');
 
     const holeNow = b.phase === 'pick' ? b.hand.filter((c) => b.sel.includes(c.id)) : b.hole;
-    const now = holeNow.length === 2 && b.phase !== 'end' ? AD.describe(AD.best([...holeNow, ...b.board])) : '';
+    const pres = holeNow.length === 2 && b.phase !== 'end' ? AD.best([...holeNow, ...b.board]) : null;
     const pips = Array.from({ length: CHANGES + (has('coin') ? 1 : 0) }, (_, i) => `<i class="${i < b.changes ? 'on' : ''}"></i>`).join('');
     const swapBtn = b.phase === 'bet'
       ? btn(ui.swap ? '취소' : `보드 체인지 · ${swapCost()}`, 'swapmode', undefined, 'ghost sm', !ui.swap && b.changes < swapCost())
       : '';
     const status = `<div class="status">
-      <span class="pips" aria-label="체인지 ${b.changes}번 남음"><span class="lbl">체인지</span>${pips}</span>
-      ${swapBtn}
-      ${now ? `<span class="now">내 패 <b>${now}</b></span>` : ''}
+      ${pres ? `<p class="mine">지금 내 패 <b>${AD.describe(pres)}</b> · 이기면 상대 <b class="num">−${winIfNow(b, holeNow, pres)}</b></p>` : ''}
+      <div class="row">
+        <span class="pips" aria-label="체인지 ${b.changes}번 남음"><span class="lbl">체인지</span>${pips}</span>
+        ${swapBtn}
+      </div>
     </div>`;
 
     let hint = '';
@@ -599,16 +623,20 @@
     return `<main class="screen battle">
       ${enemyPanel(b)}
       <section class="board${ui.swap ? ' swapping' : ''}" aria-label="보드">
-        <div class="potline"><span>${b.phase === 'pick' ? '플롭' : STREETS[b.street]}</span><b class="num">팟 ×${b.pot}</b></div>
+        <div class="potline">${stepper(b)}<b class="num pot">팟 ×${b.pot}</b></div>
         <div class="cards">${board}</div>
       </section>
-      ${b.phase === 'end' ? resultLine(b) : `<p class="hint">${hint}</p>`}
-      ${status}
-      <section class="hand" aria-label="내 손패"><div class="cards">${hand}</div></section>
+      <div class="bottom">
+        ${b.phase === 'end' ? resultLine(b) : `<p class="hint">${hint}</p>`}
+        ${status}
+        <section class="hand" aria-label="내 손패"><div class="cards${sorted.length > 5 ? ' six' : ''}">${hand}</div></section>
+      </div>
       <div class="actions">${battleActions(b)}</div>
-      ${b.log.length ? `<ol class="log" aria-label="기록">${b.log.map((l) => `<li>${l}</li>`).join('')}</ol>` : ''}
     </main>`;
   }
+
+  // 덱빌딩 판단용: 이 카드를 넣으면 같은 숫자가 몇 장이 되는지
+  const sameRank = (c) => `<small class="same">덱에 ${AD.rankLabel(c.r)} ${S.deck.filter((d) => d.r === c.r).length}장</small>`;
 
   function charmCard(id, act, extra = '', disabled = false) {
     const c = AD.CHARMS[id];
@@ -620,6 +648,7 @@
     const cards = r.cards.map((c, i) => `<div class="offer${r.took === c.id ? ' taken' : ''}">
         ${cardHTML(c, r.cardDone ? {} : { act: 'takeCard', arg: i })}
         <small>${c.en ? AD.ENCHANTS[c.en].desc : '강화 없음'}</small>
+        ${sameRank(c)}
       </div>`).join('');
     const charms = r.charms.length
       ? `<h3 class="sub">유물 1개</h3><div class="charmrow">${r.charms.map((id) => charmCard(id, 'takeCharm', r.tookCharm === id ? '<em>획득</em>' : '', r.charmDone)).join('')}</div>`
@@ -640,6 +669,7 @@
     const cards = sh.cards.map((x, i) => `<div class="offer${x.sold ? ' taken' : ''}">
         ${cardHTML(x.card, x.sold ? {} : { act: 'buyCard', arg: i })}
         <small>${x.card.en ? AD.ENCHANTS[x.card.en].desc : '강화 없음'}</small>
+        ${sameRank(x.card)}
         <b class="price num">${x.sold ? '구매함' : `${x.price}`}</b>
       </div>`).join('');
     const charms = sh.charms.map((x, i) => `<button class="charmcard" data-act="buyCharm" data-arg="${i}"${x.sold ? ' disabled' : ''}>
@@ -713,11 +743,73 @@
     ['유물', '갖고 있는 동안 계속 효과가 있는 아이템'],
   ];
 
+  const toggle = (label, isOn, act) =>
+    `<button class="toggle" data-act="${act}" role="switch" aria-checked="${isOn}"><span>${label}</span><i aria-hidden="true"></i></button>`;
+
+  function menuSheet(m) {
+    const fx = window.FX;
+    const log = S.battle && S.battle.log.length
+      ? `<h3 class="sub">이번 매치 기록</h3><ol class="log">${S.battle.log.map((l) => `<li>${l}</li>`).join('')}</ol>` : '';
+    const quit = m.confirm
+      ? `<p class="note warn">지금 포기하면 이번 도전의 진행이 사라집니다.</p>
+         <div class="row">${btn('포기하고 처음으로', 'quit', undefined, 'danger')}${btn('계속하기', 'modal', 'menu', 'ghost')}</div>`
+      : btn('처음 화면으로', 'quitAsk', undefined, 'ghost wide');
+    return `<h2 class="h">메뉴</h2>
+      <div class="toggles">${fx ? toggle('효과음', !fx.muted, 'sound') + toggle('연출 빠르게', fx.fast, 'fast') : ''}</div>
+      ${btn('규칙과 용어', 'modal', 'rules', 'ghost wide')}
+      ${log}
+      ${quit}`;
+  }
+
+  function charmsSheet() {
+    if (!S.charms.length) return '<h2 class="h">유물</h2><p class="note">아직 유물이 없습니다. 하이롤러·보스를 이기거나 상점에서 얻습니다.</p>';
+    return `<h2 class="h">유물 · ${S.charms.length}개</h2>
+      <ul class="plist">${S.charms.map((id) => `<li><b>${AD.CHARMS[id].name}</b><span>${AD.CHARMS[id].desc}</span></li>`).join('')}</ul>`;
+  }
+
+  // 상대 수치를 플레이어가 읽을 수 있는 말로
+  function enemySheet() {
+    const e = S.battle.enemy;
+    const tell = e.poker ? '텔이 없다. 표정으로는 알 수 없다'
+      : e.lie >= 0.5 ? '텔이 자주 거짓말한다' : e.lie >= 0.25 ? '텔이 가끔 거짓말한다' : '텔을 믿을 만하다';
+    const fold = !e.tight ? '벳이 와도 폴드하지 않는다'
+      : e.tight >= 1.2 ? '벳에 쉽게 폴드한다' : e.tight >= 0.8 ? '약한 패면 벳에 폴드한다' : '웬만해서는 폴드하지 않는다';
+    const traits = [
+      ['텔', tell],
+      ['폴드', fold],
+      e.mul !== 1 && [`족보 값 ×${e.mul}`, `이 상대가 이기면 내가 잃는 칩이 ${e.mul}배`],
+      e.armor && [`방어 ${e.armor}`, `내가 이겨도 상대는 ${e.armor} 덜 잃는다`],
+      e.heal && [`회복 ${e.heal}`, `이길 때마다 스택을 ${e.heal} 채운다`],
+      e.hole === 3 && ['카드 3장', '카드 3장을 받아 그중 좋은 쪽을 쓴다'],
+    ].filter(Boolean);
+    return `<div class="who-sheet"><span class="medal" aria-hidden="true">${e.glyph}</span><div><h2 class="h">${e.name}</h2><p class="note">${e.desc}</p></div></div>
+      <dl class="gloss">${traits.map(([t, d]) => `<div><dt>${t}</dt><dd>${d}</dd></div>`).join('')}</dl>`;
+  }
+
+  function deckSheet(m) {
+    const picking = m.purpose;
+    const list = S.deck.slice().sort((a, b) => b.r - a.r || a.s - b.s)
+      .map((c) => (picking && !(picking === 'enchant' && c.en) ? cardHTML(c, { act: 'pickDeck', still: true }) : cardHTML(c, { still: true, dim: picking === 'enchant' && !!c.en })))
+      .join('');
+    const head = picking === 'remove' ? `제거할 카드${m.cost ? ` · ${m.cost}` : ''}`
+      : picking === 'enchant' ? `${AD.ENCHANTS[m.en].name} 강화할 카드` : `내 덱 · ${S.deck.length}장`;
+    const suits = AD.SUITS.map((s, i) => `${s} ${S.deck.filter((c) => c.s === i).length}`).join(' · ');
+    const high = S.deck.filter((c) => c.r >= 11).length;
+    const enCount = S.deck.filter((c) => c.en).length;
+    const pile = S.battle && !picking ? `<p class="note">이번 매치 · 뽑을 카드 ${S.battle.draw.length}장 · 버린 카드 ${S.battle.discard.length}장</p>` : '';
+    return `<h2 class="h">${head}</h2>
+      <p class="note">${suits} · J 이상 ${high}장 · 강화 ${enCount}장</p>${pile}
+      <div class="cards deckgrid">${list}</div>`;
+  }
+
   function vModal() {
     const m = ui.modal;
     if (!m) return '';
     let body = '';
-    if (m.type === 'rules') {
+    if (m.type === 'menu') body = menuSheet(m);
+    else if (m.type === 'charms') body = charmsSheet();
+    else if (m.type === 'enemy' && S.battle) body = enemySheet();
+    else if (m.type === 'rules') {
       body = `<h2 class="h">규칙</h2>
         <p class="note">한 판: 플롭 → 핸드 2장 선택 → 플롭 베팅 → 턴 → 턴 베팅 → 리버 → 리버 베팅 → 쇼다운. 진 쪽이 족보 값 × 팟만큼 스택을 잃고, 상대가 폴드하면 상대가 ${AD.ANTE} × 팟을 잃습니다.</p>
         <h3 class="sub">족보 값</h3>
@@ -729,15 +821,7 @@
         <dl class="gloss">${GLOSSARY.map(([t, d]) => `<div><dt>${t}</dt><dd>${d}</dd></div>`).join('')}</dl>
         <h3 class="sub">카드 강화 · 핸드로 쓸 때만 효과</h3>
         <ul class="enlist">${AD.ENCHANT_IDS.map((k) => `<li><span class="seal seal-${k} inline">${AD.ENCHANTS[k].seal}</span><b>${AD.ENCHANTS[k].name}</b> ${AD.ENCHANTS[k].desc}</li>`).join('')}</ul>`;
-    } else {
-      const picking = m.purpose;
-      const list = S.deck.slice().sort((a, b) => b.r - a.r || a.s - b.s)
-        .map((c) => (picking && !(picking === 'enchant' && c.en) ? cardHTML(c, { act: 'pickDeck', still: true }) : cardHTML(c, { still: true, dim: picking === 'enchant' && !!c.en })))
-        .join('');
-      const head = picking === 'remove' ? `제거할 카드${m.cost ? ` · ${m.cost}` : ''}`
-        : picking === 'enchant' ? `${AD.ENCHANTS[m.en].name} 강화할 카드` : `내 덱 · ${S.deck.length}장`;
-      body = `<h2 class="h">${head}</h2><div class="cards deckgrid">${list}</div>`;
-    }
+    } else body = deckSheet(m);
     return `<div class="modal" role="dialog" aria-modal="true"><div class="sheet">${body}<div class="row">${btn('닫기', 'close', undefined, 'ghost wide')}</div></div></div>`;
   }
 

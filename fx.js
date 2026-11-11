@@ -5,23 +5,36 @@
   'use strict';
   const reduce = !!(window.matchMedia && matchMedia('(prefers-reduced-motion: reduce)').matches);
   const SOUND_KEY = 'allin-dungeon-sound';
+  const FAST_KEY = 'allin-dungeon-fast';
   const EASE = 'outExpo';
   const $ = (s, r = document) => r.querySelector(s);
   const $$ = (s, r = document) => [...r.querySelectorAll(s)];
+  let fast = false;
+  try { fast = localStorage.getItem(FAST_KEY) === 'on'; } catch (e) { /* 저장소가 막힌 브라우저: 기본값(보통) */ }
+
   let A = null;
   // anime 가 늦게 도착해도 그 뒤 연출부터는 켜지게 매번 확인한다
   function on() {
-    if (!A && window.anime && window.anime.animate) A = window.anime;
+    if (!A && window.anime && window.anime.animate) {
+      A = window.anime;
+      A.engine.speed = fast ? 2 : 1;
+    }
     return !!A && !reduce;
   }
 
   // 화면을 다시 그릴 때마다 회차가 바뀐다. 예약해 둔 연출은 자기 회차가 아니면 건너뛴다.
+  // '연출 빠르게'면 예약 시간도 anime 엔진 속도와 같이 절반이 된다.
   let gen = 0;
   function later(ms, fn) {
     const mine = gen;
     const go = () => { if (mine === gen) fn(); };
-    if (ms > 0) setTimeout(go, ms);
+    if (ms > 0) setTimeout(go, fast ? ms / 2 : ms);
     else go();
+  }
+  function toggleFast() {
+    fast = !fast;
+    if (A) A.engine.speed = fast ? 2 : 1;
+    try { localStorage.setItem(FAST_KEY, fast ? 'on' : 'off'); } catch (e) { /* 이번 방문 동안만 유지 */ }
   }
 
   /* ───────── 효과음: 파일 없이 WebAudio 로 합성 ───────── */
@@ -358,6 +371,9 @@
     run,
     sound,
     toggleSound,
+    toggleFast,
     get muted() { return muted; },
+    get fast() { return fast; },
+    get moving() { return on(); },
   };
 })();
