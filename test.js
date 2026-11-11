@@ -65,12 +65,27 @@ assert.strictEqual(AD.enemyFolds({ tight: 1 }, 0.9, false, 1, () => 0.5), false)
 const fd = C('2h 3h'), turnBoard = C('7h 9h Kc Qd'), riverBoard = C('7h 9h Kc Qd 4s');
 assert(AD.strength(fd, turnBoard) > AD.strength(fd, riverBoard));
 
-// 지도: 첫 칸은 전투, 마지막은 보스, 선택지는 겹치지 않는다
-assert.deepStrictEqual(AD.mapChoices(0), ['fight']);
-assert.deepStrictEqual(AD.mapChoices(AD.STEPS), ['boss']);
-for (let i = 0; i < 200; i++) {
-  const ch = AD.mapChoices(1 + (i % 4));
-  assert.strictEqual(new Set(ch).size, ch.length);
+// 지도: 첫 줄은 전투, 마지막은 보스 하나. 모든 칸에 들어오는 길, 길은 엇갈리지 않는다
+for (let k = 0; k < 500; k++) {
+  const m = AD.genFloorMap();
+  assert.strictEqual(m.rows.length, AD.STEPS + 1);
+  assert(m.rows[0].every((t) => t === 'fight'));
+  assert.deepStrictEqual(m.rows[AD.STEPS], ['boss']);
+  m.edges.forEach((e, r) => {
+    const b = m.rows[r + 1].length;
+    assert.strictEqual(e.length, m.rows[r].length);
+    for (let j = 0; j < b; j++) assert(e.some((t) => t.includes(j)), `${r}줄→${j}칸 들어오는 길`);
+    e.forEach((t) => assert(t.length >= 1 && t.every((j) => j >= 0 && j < b)));
+    for (let i = 0; i + 1 < e.length; i++) assert(Math.max(...e[i]) <= Math.min(...e[i + 1]), '길이 엇갈림');
+  });
+  // 어느 길로 가도 보스까지 닿는다
+  let path = [];
+  for (let step = 0; step <= AD.STEPS; step++) {
+    const ch = AD.choicesAt(m, path, step);
+    assert(ch.length >= 1);
+    path = [...path, ch[Math.floor(Math.random() * ch.length)]];
+  }
+  assert.strictEqual(m.rows[AD.STEPS][path[AD.STEPS]], 'boss');
 }
 // 층마다 일반·엘리트·보스가 다 있다
 for (let f = 1; f <= AD.FLOORS; f++) for (const k of ['normal', 'elite', 'boss']) assert(AD.pickEnemy(f, k).name, `${f}층 ${k}`);

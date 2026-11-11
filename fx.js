@@ -255,8 +255,30 @@
       A.animate(box, { v: +el.dataset.n, duration: 900, delay: 250, ease: 'outQuart', onUpdate: () => { el.textContent = Math.round(box.v); } });
       later(300, () => sound('coin'));
     });
+    if (screen === 'map') mapIntro(main);
     if (screen === 'win') [200, 650, 1100].forEach((ms) => later(ms, () => burst($('.logo'), 26)));
     if (screen === 'over') later(200, () => shake($('.logo'), 10));
+  }
+
+  // 지도: 길이 위 줄부터 차례로 그려지고(SVG 선 그리기), 칸이 줄마다 톡 튀어나온다
+  function mapIntro(main) {
+    const paths = $$('.maplines path', main);
+    if (paths.length && A.svg && A.svg.createDrawable) {
+      A.animate(A.svg.createDrawable(paths), {
+        draw: ['0 0', '0 1'], duration: 650, ease: 'inOutQuad',
+        delay: (el) => 120 + (+el.getAttribute('data-row') || 0) * 80,
+      });
+    }
+    const nodes = $$('.mnode', main);
+    if (nodes.length) {
+      A.animate(nodes, {
+        scale: [0.3, 1], opacity: [0, 1], duration: 420, ease: 'outBack(1.7)',
+        delay: (el) => 80 + (+el.style.getPropertyValue('--row') || 0) * 80,
+        onComplete: clean(nodes),
+      });
+    }
+    const token = $('.token', main);
+    if (token) A.animate(token, { y: [-30, 0], opacity: [0, 1], duration: 520, delay: 650, ease: 'outBounce', onComplete: clean([token]) });
   }
 
   /* ───────── 이벤트별 연출. 각 함수는 연출이 끝나는 시각(ms)을 돌려준다 ───────── */

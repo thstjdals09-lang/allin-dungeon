@@ -1,9 +1,10 @@
-/* 올인 던전 — 진행과 화면. 규칙은 logic.js 의 전역 AD, 연출은 fx.js 의 FX.
-   800줄을 조금 넘는 이유: 상태 S·ui 를 이 클로저 하나가 쥐고 있어서 화면 함수를 떼어 내면 내부를 전역으로 열어야 한다. */
+/* 올인 던전 — 상태와 진행, 전투·상점 화면. 규칙은 logic.js(AD), 화면 조각·시트·지도·타이틀은 views.js(V),
+   배경 그림은 scenes.js(SCENES), 연출은 fx.js(FX). */
 (function () {
   'use strict';
-  const VERSION = 2; // v1 은 베팅이 플롭 한 번뿐이라 저장 형식이 다르다
-  const SAVE_KEY = 'allin-dungeon-v2';
+  const VERSION = 3; // v3: 층 지도가 갈림길(map·path)로 바뀌어 v2 저장과 형식이 다르다
+  const SAVE_KEY = 'allin-dungeon-v3';
+  const PROFILE_KEY = 'allin-dungeon-profile';
   const START_STACK = 80;
   const MIN_DECK = 8;
   const CHANGES = 2;
@@ -14,15 +15,26 @@
 
   let S = null; // 판 전체 상태 (JSON 으로 저장)
   // 저장하지 않는 화면 상태. fx = 이번 클릭에서 일어난 일(fx.js 가 연출), from = 누른 버튼 위치
-  let ui = { modal: null, swap: false, toast: '', fx: [], from: null, screen: null };
-  const seen = new Set(); // 이미 그린 카드 id — 딜 애니메이션을 한 번만
-  const NODE_GLYPH = { fight: '卓', elite: '豪', shop: '市', rest: '休', event: '謎', boss: '王' };
+  // mapSel = 지도에서 눌러 둔 칸(들어가기 전 확인용)
+  let ui = { modal: null, swap: false, toast: '', fx: [], from: null, screen: null, mapSel: null };
+  const { cardName, cardHTML, backHTML, slotHTML, btn, bar } = V;
 
   const has = (k) => S.charms.includes(k);
   const fx = (ev) => { ui.fx = [...ui.fx, ev]; };
   const newId = () => 'c' + S.nextId++;
-  const cardName = (c) => `${AD.SUITS[c.s]}${AD.rankLabel(c.r)}${c.en ? ` (${AD.ENCHANTS[c.en].name})` : ''}`;
   const toast = (msg) => { ui.toast = msg; };
+
+  /* ───────── 기록·도감 (판을 넘어 남는 것) ───────── */
+  const EMPTY_PROFILE = { runs: 0, wins: 0, bestFloor: 0, kills: 0, bestHand: -1, bestHit: 0, enemies: [], charms: [] };
+  function loadProfile() {
+    try { return { ...EMPTY_PROFILE, ...JSON.parse(localStorage.getItem(PROFILE_KEY) || '{}') }; } catch (e) { return { ...EMPTY_PROFILE }; }
+  }
+  let P = loadProfile();
+  function saveProfile() {
+    try { localStorage.setItem(PROFILE_KEY, JSON.stringify(P)); } catch (e) { /* 저장이 막힌 브라우저: 이번 방문 동안만 */ }
+  }
+  const note = (patch) => { P = { ...P, ...patch }; };
+  const remember = (key, id) => { if (!P[key].includes(id)) note({ [key]: [...P[key], id] }); };
   const swapCost = () => (has('bribe') ? 1 : 2);
   const isState = (s) => !!s && s.v === VERSION && Array.isArray(s.deck);
 
@@ -39,23 +51,29 @@
 
   /* ───────── 진행 ───────── */
   function newRun() {
-    seen.clear(); // 카드 id 가 c0 부터 다시 쓰이므로 딜 연출 기록도 비운다
+    V.resetSeen(); // 카드 id 가 c0 부터 다시 쓰이므로 딜 연출 기록도 비운다
     S = {
       v: VERSION, screen: 'map', hp: START_STACK, maxHp: START_STACK, gold: 40, deck: [], charms: [],
-      floor: 1, step: 0, node: null, choices: AD.mapChoices(0, rnd), removeCost: 50, nextId: 0,
+      floor: 1, step: 0, node: null, map: AD.genFloorMap(rnd), path: [], removeCost: 50, nextId: 0,
       stats: { hands: 0, won: 0, best: -1, kills: 0 },
     };
     S.deck = AD.starterDeck(newId, rnd);
+    note({ runs: P.runs + 1, bestFloor: Math.max(P.bestFloor, 1) });
   }
+
+  const choices = () => AD.choicesAt(S.map, S.path, S.step);
 
   function advance() {
     if (S.node === 'boss') {
-      if (S.floor === AD.FLOORS) { S.screen = 'win'; return; }
+      if (S.floor === AD.FLOORS) { note({ wins: P.wins + 1 }); S.screen = 'win'; return; }
       S.floor++;
       S.step = 0;
+      S.map = AD.genFloorMap(rnd);
+      S.path = [];
+      note({ bestFloor: Math.max(P.bestFloor, S.floor) });
     } else S.step++;
     S.node = null;
-    S.choices = AD.mapChoices(S.step, rnd);
+    ui.mapSel = null;
     S.screen = 'map';
   }
 
@@ -63,6 +81,7 @@
   function heal(n) { S.hp = Math.min(S.maxHp, S.hp + n); }
   function gainCharm(id) {
     S.charms = [...S.charms, id];
+    remember('charms', id);
     if (id === 'pact') { S.maxHp -= 12; S.hp = Math.min(S.hp, S.maxHp); }
   }
 
@@ -79,6 +98,7 @@
   function startMatch(kind) {
     const e = AD.pickEnemy(S.floor, kind === 'fight' ? 'normal' : kind, rnd);
     S.battle = { enemy: { ...e, maxHp: e.hp }, draw: AD.shuffle(S.deck, rnd), discard: [], hand: [], handNo: 0, log: [] };
+    remember('enemies', e.id);
     S.screen = 'battle';
     startHand();
   }
@@ -191,6 +211,7 @@
     heal(out.heal);
     S.stats.best = Math.max(S.stats.best, pres.cat);
     if (out.winner > 0) S.stats.won++;
+    note({ bestHand: Math.max(P.bestHand, pres.cat), bestHit: Math.max(P.bestHit, out.toEnemy) });
     const result = {
       type: 'show', ...out, pdesc: AD.describe(pres), edesc: AD.describe(eres),
       used: pres.cards.map((c) => c.id), eused: eres.cards.map((c) => c.id),
@@ -210,6 +231,7 @@
     if (has('bandage')) heal(6);
     if (kind === 'boss') heal(Math.round(S.maxHp * 0.4));
     S.stats.kills++;
+    note({ kills: P.kills + 1 });
     const charms = AD.randomCharms(kind === 'boss' ? 3 : kind === 'elite' ? 2 : 0, S.charms, rnd);
     S.reward = { gold, cards: [0, 1, 2].map(() => AD.randomCard(S.floor, newId, rnd)), charms, cardDone: false, charmDone: !charms.length };
     S.battle = null;
@@ -284,9 +306,27 @@
 
   /* ───────── 버튼 동작 ───────── */
   const ACT = {
-    start() { newRun(); },
+    start() {
+      if (!S && loadSave()) { ui.modal = { type: 'newrun' }; return; } // 진행 중인 도전을 덮어쓰기 전에 묻는다
+      newRun();
+    },
+    startNew() { ui.modal = null; newRun(); },
     cont() { S = loadSave(); },
-    node(t) { enterNode(t); },
+    mapSel(i) { ui.mapSel = +i; },
+    go(i) {
+      if (!choices().includes(+i)) return;
+      S.path = [...S.path, +i];
+      ui.mapSel = null;
+      enterNode(S.map.rows[S.step][+i]);
+    },
+    wipeAsk() { ui.modal = { type: 'settings', confirm: true }; },
+    wipe() {
+      try { localStorage.removeItem(SAVE_KEY); localStorage.removeItem(PROFILE_KEY); } catch (e) { /* 저장이 막힌 브라우저: 지울 것도 없다 */ }
+      P = { ...EMPTY_PROFILE };
+      S = null;
+      ui.modal = null;
+      toast('저장 데이터를 지웠습니다');
+    },
     sel(id) {
       const b = S.battle;
       if (b.phase !== 'pick') return;
@@ -429,40 +469,14 @@
     ACT[el.dataset.act](el.dataset.arg);
     if (S && S.hp <= 0 && S.screen !== 'battle') S.screen = 'over'; // 이벤트에서 스택을 다 잃은 경우
     if (S) save();
+    saveProfile();
     render();
   });
   document.addEventListener('keydown', (ev) => {
     if (ev.key === 'Escape' && ui.modal) { ui.modal = null; render(); }
   });
 
-  /* ───────── 그리기 ───────── */
-  // 카드 앞면: 왼쪽 위·오른쪽 아래 모서리 숫자, 가운데는 무늬(그림 카드는 큰 글자)
-  function cardHTML(c, o = {}) {
-    const fresh = !o.still && !seen.has(c.id);
-    seen.add(c.id);
-    const court = c.r >= 11;
-    const cls = ['card', c.s === 1 || c.s === 2 ? 'red' : 'black', court && 'court', c.en && 'en', o.sel && 'sel', o.used && 'used', o.dim && 'dim', o.swap && 'swappable', fresh && 'deal']
-      .filter(Boolean).join(' ');
-    const rank = AD.rankLabel(c.r);
-    const suit = AD.SUITS[c.s];
-    const idx = (pos) => `<span class="idx ${pos}"><b>${rank}</b><i>${suit}</i></span>`;
-    const en = c.en ? `<span class="seal seal-${c.en}">${AD.ENCHANTS[c.en].seal}</span>` : '';
-    const inner = `${idx('tl')}<span class="pip">${court ? rank : suit}</span>${idx('br')}${en}`;
-    const label = cardName(c);
-    const style = o.style ? ` style="${o.style}"` : '';
-    if (!o.act) return `<div class="${cls}"${style} role="img" aria-label="${label}">${inner}</div>`;
-    return `<button class="${cls}"${style} data-act="${o.act}" data-arg="${o.arg ?? c.id}" aria-label="${label}" aria-pressed="${!!o.sel}">${inner}</button>`;
-  }
-  const backHTML = () => '<div class="card back" role="img" aria-label="엎어 둔 카드"></div>';
-  const slotHTML = () => '<div class="card slot" aria-hidden="true"></div>';
-  const btn = (label, act, arg, cls = '', disabled = false) =>
-    `<button class="btn ${cls}" data-act="${act}"${arg !== undefined ? ` data-arg="${arg}"` : ''}${disabled ? ' disabled' : ''}>${label}</button>`;
-  // 막대는 scaleX 로 그린다 — fx.js 가 직전 값에서 이어서 움직이게 data-key·data-v 를 남긴다
-  function bar(v, max, cls, key) {
-    const ratio = Math.max(0, Math.min(1, v / max)).toFixed(4);
-    return `<span class="bar ${cls}" data-key="${key}" data-v="${ratio}" role="meter" aria-valuemin="0" aria-valuemax="${max}" aria-valuenow="${Math.max(0, v)}"><i style="transform:scaleX(${ratio})"></i></span>`;
-  }
-
+  /* ───────── 그리기 (카드·버튼·시트 조각은 views.js) ───────── */
   function topbar() {
     return `<header class="top">
       <div class="stat stack"><span class="lbl">스택</span><b class="num">${S.hp}<small>/${S.maxHp}</small></b>${bar(S.hp, S.maxHp, 'hp', 'me')}</div>
@@ -473,41 +487,8 @@
     </header>`;
   }
 
-  // 타이틀 장식: 떠다니는 무늬와 스페이드 로열 플러시 부채
-  const DRIFTS = Array.from({ length: 14 }, (_, i) =>
-    `<span style="--x:${(i * 37) % 100}%;--d:${11 + ((i * 7) % 9)}s;--delay:-${(i * 13) % 17}s;--s:${18 + ((i * 11) % 28)}px">${AD.SUITS[i % 4]}</span>`).join('');
-  const TITLE_FAN = [10, 11, 12, 13, 14].map((r, i) => ({ id: `title-${r}`, r, s: 0, en: null, rot: (i - 2) * 10 }));
-
-  function vTitle() {
-    const saved = loadSave();
-    return `<main class="screen title">
-      <div class="drifts" aria-hidden="true">${DRIFTS}</div>
-      <p class="eyebrow">헤즈업 홀덤 로그라이크</p>
-      <h1 class="logo">올인<br>던전</h1>
-      <div class="fan" aria-hidden="true">${TITLE_FAN.map((c) => cardHTML(c, { style: `--r:${c.rot}deg` })).join('')}</div>
-      <p class="lead">내 덱에서 핸드 두 장, 보드에 다섯 장. 헤즈업으로 상대 스택을 0으로 만들고, 카드를 모으고 강화해 3층 아래 하우스의 주인까지 내려가세요.</p>
-      <div class="row">${btn('새로 시작', 'start', undefined, 'primary')}${saved ? btn(`이어 하기 · ${saved.floor}층`, 'cont') : ''}</div>
-      <ol class="howto">
-        <li><b>플롭이 깔리면</b> 손패 5장 중 핸드 2장을 고릅니다. 체인지로 손패를 바꿀 수 있습니다.</li>
-        <li><b>플롭·턴·리버마다 베팅합니다.</b> 체크하면 다음 카드가 열리고, 벳은 팟 +1, 올인은 팟 +3. 패가 약한 상대는 폴드합니다.</li>
-        <li><b>쇼다운에서 진 쪽</b>이 족보 값 × 팟만큼 스택을 잃습니다.</li>
-      </ol>
-    </main>`;
-  }
-
-  function vMap() {
-    const dots = Array.from({ length: AD.STEPS + 1 }, (_, i) => {
-      const cls = [i < S.step && 'done', i === S.step && 'now', i === AD.STEPS && 'boss'].filter(Boolean).join(' ');
-      return `<li class="${cls}"><span>${i === AD.STEPS ? '보스' : i + 1}</span></li>`;
-    }).join('');
-    const nodes = S.choices.map((t) => `<button class="node node-${t}" data-act="node" data-arg="${t}"><span class="glyph" aria-hidden="true">${NODE_GLYPH[t]}</span><b>${AD.NODES[t].name}</b><span class="desc">${AD.NODES[t].desc}</span></button>`).join('');
-    return `<main class="screen map">
-      <h2 class="h">${S.floor}층</h2>
-      <ol class="track" aria-label="층 진행">${dots}</ol>
-      <p class="lead">${S.step === AD.STEPS ? '보스 테이블입니다.' : '다음 행선지를 고르세요.'}</p>
-      <div class="nodes">${nodes}</div>
-    </main>`;
-  }
+  const vTitle = () => V.title(loadSave(), P);
+  const vMap = () => V.map(S, choices(), ui.mapSel);
 
   function enemyPanel(b) {
     const e = b.enemy;
@@ -732,101 +713,38 @@
     </main>`;
   }
 
-  const GLOSSARY = [
-    ['핸드', '손패에서 고른 내 카드 2장'],
-    ['스택', '내 칩. 0이 되면 버스트(탈락)'],
-    ['팟', '이번 판에 걸린 배수. 1에서 시작'],
-    ['체크', '팟을 그대로 두고 다음 카드를 연다'],
-    ['벳', '팟 +1. 상대는 콜하거나 폴드한다'],
-    ['올인', `팟 +${AD.ALLIN_ADD}. 콜하면 남은 카드를 다 깔고 바로 쇼다운`],
-    ['폴드', `이번 판을 포기한다. ${AD.ANTE} × 팟을 잃는다`],
-    ['텔', '상대 표정. 상대마다 거짓말하는 정도가 다르다'],
-    ['체인지', '판마다 2번. 손패 1장 교체에 1, 보드 1장 교체에 2'],
-    ['상금', '매치에서 이기면 받는 돈. 상점에서 쓴다'],
-    ['유물', '갖고 있는 동안 계속 효과가 있는 아이템'],
-  ];
-
-  const toggle = (label, isOn, act) =>
-    `<button class="toggle" data-act="${act}" role="switch" aria-checked="${isOn}"><span>${label}</span><i aria-hidden="true"></i></button>`;
-
-  function menuSheet(m) {
-    const fx = window.FX;
-    const log = S.battle && S.battle.log.length
-      ? `<h3 class="sub">이번 매치 기록</h3><ol class="log">${S.battle.log.map((l) => `<li>${l}</li>`).join('')}</ol>` : '';
-    const quit = m.confirm
-      ? `<p class="note warn" role="alert">지금 포기하면 이번 도전의 진행이 사라집니다.</p>
-         <div class="row">${btn('포기하고 처음으로', 'quit', undefined, 'danger')}${btn('계속하기', 'modal', 'menu', 'ghost')}</div>`
-      : btn('처음 화면으로', 'quitAsk', undefined, 'ghost wide');
-    return `<h2 class="h">메뉴</h2>
-      <div class="toggles">${fx ? toggle('효과음', !fx.muted, 'sound') + toggle('연출 빠르게', fx.fast, 'fast') : ''}</div>
-      ${btn('규칙과 용어', 'modal', 'rules', 'ghost wide')}
-      ${log}
-      ${quit}`;
-  }
-
-  function charmsSheet() {
-    if (!S.charms.length) return '<h2 class="h">유물</h2><p class="note">아직 유물이 없습니다. 하이롤러·보스를 이기거나 상점에서 얻습니다.</p>';
-    return `<h2 class="h">유물 · ${S.charms.length}개</h2>
-      <ul class="plist">${S.charms.map((id) => `<li><b>${AD.CHARMS[id].name}</b><span>${AD.CHARMS[id].desc}</span></li>`).join('')}</ul>`;
-  }
-
-  // 상대 수치를 플레이어가 읽을 수 있는 말로
-  function enemySheet() {
-    const e = S.battle.enemy;
-    const tell = e.poker ? '텔이 없다. 표정으로는 알 수 없다'
-      : e.lie >= 0.5 ? '텔이 자주 거짓말한다' : e.lie >= 0.25 ? '텔이 가끔 거짓말한다' : '텔을 믿을 만하다';
-    const fold = !e.tight ? '벳이 와도 폴드하지 않는다'
-      : e.tight >= 1.2 ? '벳에 쉽게 폴드한다' : e.tight >= 0.8 ? '약한 패면 벳에 폴드한다' : '웬만해서는 폴드하지 않는다';
-    const traits = [
-      ['텔', tell],
-      ['폴드', fold],
-      e.mul !== 1 && [`족보 값 ×${e.mul}`, `이 상대가 이기면 내가 잃는 칩이 ${e.mul}배`],
-      e.armor && [`방어 ${e.armor}`, `내가 이겨도 상대는 ${e.armor} 덜 잃는다`],
-      e.heal && [`회복 ${e.heal}`, `이길 때마다 스택을 ${e.heal} 채운다`],
-      e.hole === 3 && ['카드 3장', '카드 3장을 받아 그중 좋은 쪽을 쓴다'],
-    ].filter(Boolean);
-    return `<div class="who-sheet"><span class="medal" aria-hidden="true">${e.glyph}</span><div><h2 class="h">${e.name}</h2><p class="note">${e.desc}</p></div></div>
-      <dl class="gloss">${traits.map(([t, d]) => `<div><dt>${t}</dt><dd>${d}</dd></div>`).join('')}</dl>`;
-  }
-
-  function deckSheet(m) {
-    const picking = m.purpose;
-    const list = S.deck.slice().sort((a, b) => b.r - a.r || a.s - b.s)
-      .map((c) => (picking && !(picking === 'enchant' && c.en) ? cardHTML(c, { act: 'pickDeck', still: true }) : cardHTML(c, { still: true, dim: picking === 'enchant' && !!c.en })))
-      .join('');
-    const head = picking === 'remove' ? `제거할 카드${m.cost ? ` · ${m.cost}` : ''}`
-      : picking === 'enchant' ? `${AD.ENCHANTS[m.en].name} 강화할 카드` : `내 덱 · ${S.deck.length}장`;
-    const suits = AD.SUITS.map((s, i) => `${s} ${S.deck.filter((c) => c.s === i).length}`).join(' · ');
-    const high = S.deck.filter((c) => c.r >= 11).length;
-    const enCount = S.deck.filter((c) => c.en).length;
-    const pile = S.battle && !picking ? `<p class="note">이번 매치 · 뽑을 카드 ${S.battle.draw.length}장 · 버린 카드 ${S.battle.discard.length}장</p>` : '';
-    return `<h2 class="h">${head}</h2>
-      <p class="note">${suits} · J 이상 ${high}장 · 강화 ${enCount}장</p>${pile}
-      <div class="cards deckgrid">${list}</div>`;
-  }
-
+  // 열린 시트를 고른다. 판 상태가 필요한 시트는 판이 없으면 그리지 않는다.
   function vModal() {
     const m = ui.modal;
-    if (!m || !S) return '';
-    let body = '';
-    if (m.type === 'menu') body = menuSheet(m);
-    else if (m.type === 'charms') body = charmsSheet();
-    else if (m.type === 'enemy') { if (!S.battle) return ''; body = enemySheet(); }
-    else if (m.type === 'rules') {
-      body = `<h2 class="h">규칙</h2>
-        <p class="note">한 판: 플롭 → 핸드 2장 선택 → 플롭 베팅 → 턴 → 턴 베팅 → 리버 → 리버 베팅 → 쇼다운. 진 쪽이 족보 값 × 팟만큼 스택을 잃고, 상대가 폴드하면 상대가 ${AD.ANTE} × 팟을 잃습니다.</p>
-        <h3 class="sub">족보 값</h3>
-        <table class="ranks"><tbody>
-        ${AD.HANDS.map((h) => `<tr><td>${h.name}</td><td class="num">${h.value}</td></tr>`).reverse().join('')}
-        <tr><td>로열 플러시</td><td class="num">+${AD.ROYAL_BONUS}</td></tr></tbody></table>
-        <p class="note">파이브카드는 이 게임에만 있는 족보입니다. 내 덱 카드가 보드 카드와 겹칠 수 있어서 나옵니다.</p>
-        <h3 class="sub">용어</h3>
-        <dl class="gloss">${GLOSSARY.map(([t, d]) => `<div><dt>${t}</dt><dd>${d}</dd></div>`).join('')}</dl>
-        <h3 class="sub">카드 강화 · 핸드로 쓸 때만 효과</h3>
-        <ul class="enlist">${AD.ENCHANT_IDS.map((k) => `<li><span class="seal seal-${k} inline">${AD.ENCHANTS[k].seal}</span><b>${AD.ENCHANTS[k].name}</b> ${AD.ENCHANTS[k].desc}</li>`).join('')}</ul>`;
-    } else if (m.type === 'deck') body = deckSheet(m);
-    else return '';
-    return `<div class="modal" role="dialog" aria-modal="true" aria-labelledby="sheet-title"><div class="sheet">${body.replace('<h2 class="h">', '<h2 class="h" id="sheet-title">')}<div class="row">${btn('닫기', 'close', undefined, 'ghost wide')}</div></div></div>`;
+    if (!m) return '';
+    const sh = V.sheets;
+    const run = {
+      menu: () => sh.menu(m, S),
+      charms: () => sh.charms(S),
+      enemy: () => (S.battle ? sh.enemy(S) : ''),
+      deck: () => sh.deck(m, S),
+    };
+    const any = {
+      howto: () => sh.howto(),
+      codex: () => sh.codex(P),
+      records: () => sh.records(P),
+      settings: () => sh.settings(m),
+      newrun: () => { const saved = loadSave(); return saved ? sh.newRunConfirm(saved) : ''; },
+    };
+    const make = (S && run[m.type]) || any[m.type];
+    const body = make ? make() : '';
+    return body ? V.sheet(body) : '';
+  }
+
+  // 배경 그림: 화면 종류가 바뀔 때만 갈아 끼운다(같은 화면에서 다시 그려도 등불 연출이 끊기지 않게)
+  const SCENE_OF = { title: 'title', over: 'title', win: 'title', battle: 'table', reward: 'table' };
+  function setScene(screen) {
+    const el = document.getElementById('scene');
+    const kind = SCENE_OF[screen] || 'hall';
+    if (!el || !window.SCENES || el.dataset.kind === kind) return;
+    el.dataset.kind = kind;
+    el.className = `scene scene-${kind}`;
+    el.innerHTML = window.SCENES[kind];
   }
 
   // 다시 그려도 키보드 포커스가 제자리에 있게: 누른 버튼을 기억했다가 같은 버튼으로 돌려놓는다
@@ -841,6 +759,7 @@
     const screen = S ? S.screen : 'title';
     const changed = screen !== ui.screen;
     if (changed) ui.modal = null; // 화면이 바뀌면 열려 있던 시트는 닫는다
+    if (changed) setScene(screen);
     const keep = focusKey();
     const hadModal = !!app.querySelector('.modal');
     const view = !S ? vTitle() : { map: vMap, battle: vBattle, reward: vReward, shop: vShop, rest: vRest, event: vEvent, over: vEnd, win: vEnd }[S.screen]();
