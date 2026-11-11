@@ -247,6 +247,31 @@ const iconNames = [...AD.ENEMIES.map((e) => e.icon), ...AD.ENCHANT_IDS.map((k) =
 iconNames.forEach((n) => assert.ok(ICONS[n], '없는 아이콘: ' + n));
 ['spade', 'crown', 'store', 'coffee', 'circle-help', 'skull', 'book-open', 'library', 'trophy', 'settings', 'calendar', 'gem'].forEach((n) => assert.ok(ICONS[n], '없는 아이콘: ' + n));
 
+// 트릭
+assert.deepStrictEqual(AD.TRICK_IDS, ['peek', 'mark', 'stare', 'double']);
+AD.TRICK_IDS.forEach((k) => assert.ok(ICONS[AD.TRICKS[k].icon], '없는 트릭 아이콘: ' + k));
+const ts = { phase: 'bet', street: 0, facing: false, hiddenCard: false, peeked: false, hiddenEnemyCards: 2, stared: false };
+AD.TRICK_IDS.forEach((k) => { assert.strictEqual(AD.canUseTrick(k, ts), null, k); assert.ok(AD.canUseTrick(k, { ...ts, phase: 'pick' }), k + ' 핸드 확정 전'); assert.ok(AD.canUseTrick(k, { ...ts, phase: 'end' })); });
+assert.ok(AD.canUseTrick('peek', { ...ts, street: 2 }), '리버 엿보기 불가');
+assert.strictEqual(AD.canUseTrick('peek', { ...ts, street: 1 }), null);
+assert.ok(AD.canUseTrick('peek', { ...ts, street: 1, hiddenCard: true }), '숨겨진 리버 엿보기 불가');
+assert.strictEqual(AD.canUseTrick('peek', { ...ts, street: 0, hiddenCard: true }), null);
+assert.ok(AD.canUseTrick('peek', { ...ts, peeked: true }));
+assert.ok(AD.canUseTrick('mark', { ...ts, hiddenEnemyCards: 0 }));
+assert.ok(AD.canUseTrick('stare', { ...ts, stared: true }));
+assert.strictEqual(AD.canUseTrick('stare', { ...ts, facing: true }), null);
+assert.ok(AD.canUseTrick('double', { ...ts, facing: true }), '상대 벳 중 더블 다운 불가');
+assert.ok(AD.canUseTrick('nope', ts));
+assert.strictEqual(AD.trickRoom(2), null);
+assert.strictEqual(AD.trickRoom(3), '트릭 칸이 가득 찼습니다 (3/3)');
+assert.ok(AD.rewardTrick(() => 0.39) && !AD.rewardTrick(() => 0.4), '보상 확률 40%');
+const st2 = AD.shopTricks(Math.random);
+assert.strictEqual(st2.length, 2);
+assert.notStrictEqual(st2[0].id, st2[1].id);
+st2.forEach((x) => assert.ok(AD.TRICK_IDS.includes(x.id) && x.price >= 30 && x.price <= 40));
+const seed = (n) => { let x = AD.seedNext(n); return () => { x = AD.seedNext(x.state); return x.value; }; };
+assert.deepStrictEqual(AD.shopTricks(seed(7)), AD.shopTricks(seed(7)), '같은 시드는 같은 상점 트릭');
+
 console.log('logic 테스트 통과');
 
 if (process.argv.includes('--sim')) sim();

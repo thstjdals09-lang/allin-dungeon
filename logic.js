@@ -56,6 +56,37 @@
     slim: { name: '얇은 지갑', desc: '덱이 14장 이하면 모든 족보 값 +4' },
   };
 
+  // 트릭: 쓰면 사라지는 소모품(최대 MAX_TRICKS 칸). 전투 베팅 중에만 쓴다.
+  const TRICKS = {
+    peek: { name: '엿보기', icon: 'scan-eye', desc: '다음에 깔릴 보드 카드를 미리 본다 (리버 전)' },
+    mark: { name: '표시된 카드', icon: 'badge-check', desc: '엎어 둔 상대 핸드 1장을 공개한다' },
+    stare: { name: '노려보기', icon: 'scan-face', desc: '이번 거리, 상대가 벳·올인에 폴드할 확률이 크게 오른다' },
+    double: { name: '더블 다운', icon: 'chevrons-up', desc: '팟 +2. 상대 응답 없음, 상대가 벳한 뒤에는 못 쓴다' },
+  };
+  const TRICK_IDS = Object.keys(TRICKS);
+  const MAX_TRICKS = 3;
+  const STARE_BOOST = 1.6;
+  const TRICK_REWARD_CHANCE = 0.4;
+  const trickRoom = (owned) => (owned >= MAX_TRICKS ? `트릭 칸이 가득 찼습니다 (${MAX_TRICKS}/${MAX_TRICKS})` : null);
+  // 매치 보상: 40% 로 트릭 1개 후보, 아니면 null
+  const rewardTrick = (rng = Math.random) => (rng() < TRICK_REWARD_CHANCE ? pick(TRICK_IDS, rng) : null);
+  // 상점: 서로 다른 트릭 2개, 기본 가격 30~40 (난이도 가격은 호출 쪽에서)
+  const shopTricks = (rng = Math.random) => shuffle(TRICK_IDS, rng).slice(0, 2).map((id) => ({ id, price: 30 + Math.floor(rng() * 3) * 5 }));
+  // 지금 쓸 수 없으면 이유(한국어), 쓸 수 있으면 null. st = { phase, street, facing, hiddenCard, peeked, hiddenEnemyCards, stared }
+  function canUseTrick(id, st) {
+    if (!TRICKS[id]) return '알 수 없는 트릭입니다';
+    if (st.phase !== 'bet') return '핸드를 확정한 뒤 베팅 중에만 쓸 수 있습니다';
+    if (id === 'peek') {
+      if (st.street >= 2) return '리버에는 다음 카드가 없습니다';
+      if (st.hiddenCard && st.street === 1) return '숨겨진 리버는 엿볼 수 없습니다';
+      if (st.peeked) return '이미 다음 카드를 엿봤습니다';
+    }
+    if (id === 'mark' && !st.hiddenEnemyCards) return '공개할 상대 카드가 없습니다';
+    if (id === 'stare' && st.stared) return '이번 거리에 이미 노려봤습니다';
+    if (id === 'double' && st.facing) return '상대가 벳한 뒤에는 쓸 수 없습니다';
+    return null;
+  }
+
   // mul: 상대가 이길 때 족보 값 배수 · tight: 벳에 폴드하는 정도(0이면 폴드 안 함)
   // bluff: 약해도 벳하는 확률(기본 0.1)
   // lie: 텔이 거짓일 확률 · poker: 텔이 없음 · armor: 내가 이길 때 덜 잃는 칩
@@ -395,7 +426,7 @@
   }
 
   const api = {
-    SUITS, rankLabel, HANDS, ROYAL_BONUS, ANTE, ALLIN_ADD, ENCHANTS, ENCHANT_IDS, CHARMS, ENEMIES, NODES, STEPS, FLOORS, TELLS, RULES,
+    SUITS, rankLabel, HANDS, ROYAL_BONUS, ANTE, ALLIN_ADD, ENCHANTS, ENCHANT_IDS, CHARMS, TRICKS, TRICK_IDS, MAX_TRICKS, STARE_BOOST, trickRoom, rewardTrick, shopTricks, canUseTrick, ENEMIES, NODES, STEPS, FLOORS, TELLS, RULES,
     seedNext, seedFromDate, shuffle, pick, starterDeck, tableDeck, eval5, best, isRoyal, describe, strength, tellOf, enemyFolds, enemyAct,
     isForcedAllin, ruleNotice, rigCard, equityAtFlop, reviewVerdict, visibleBoard, foldDamage, resolveShowdown, pickEnemy, mergeableRanks, mergeCards, randomCard, randomCharms, genFloorMap, choicesAt, migrateSave,
   };

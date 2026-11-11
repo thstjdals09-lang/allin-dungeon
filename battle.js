@@ -75,7 +75,10 @@ window.BATTLE = function (C) {
     b.allin = false;
     b.committed = false;
     b.flop = null;
+    b.peek = null; // 엿본 다음 카드 {id}
+    b.stare = false; // 이번 거리 노려보기
     b.phase = 'pick';
+    ui.trickSel = null;
     ui.swap = false;
     readEnemy(b);
     if (has('mirror')) reveal(b);
@@ -105,6 +108,8 @@ window.BATTLE = function (C) {
     if (b.street === 2) return showdown(b);
     b.street++;
     b.facing = null;
+    b.peek = null;
+    b.stare = false;
     b.board = [...b.board, b.table[0]];
     b.table = b.table.slice(1);
     ui.swap = false;
@@ -127,7 +132,7 @@ window.BATTLE = function (C) {
     b.committed = true;
     fx({ t: 'chip', allin });
     const where = `${STREETS[b.street]}${b.facing ? ` 상대 ${b.facing.kind === 'bet' ? '벳' : '레이즈'} →` : ''} ${allin ? '올인' : word}`;
-    const act = AD.enemyAct(b.enemy, b.str, allin ? 'allin' : canReraise ? 'bet' : 'raise', rnd, has('face') ? 1.25 : 1);
+    const act = AD.enemyAct(b.enemy, b.str, allin ? 'allin' : canReraise ? 'bet' : 'raise', rnd, (has('face') ? 1.25 : 1) * (b.stare ? AD.STARE_BOOST : 1));
     if (act === 'fold') {
       const d = AD.foldDamage(b.pot, C.S.charms);
       payGold(b);
@@ -214,7 +219,7 @@ window.BATTLE = function (C) {
     C.S.stats.kills++;
     note({ kills: C.P.kills + 1 });
     const charms = AD.randomCharms(kind === 'boss' ? 3 : kind === 'elite' ? 2 : 0, C.S.charms, rnd);
-    C.S.reward = { gold, cards: [0, 1, 2].map(() => AD.randomCard(C.S.floor, newId, rnd)), charms, cardPick: null, charmPick: null };
+    C.S.reward = { gold, trick: AD.rewardTrick(rnd), trickPick: false, cards: [0, 1, 2].map(() => AD.randomCard(C.S.floor, newId, rnd)), charms, cardPick: null, charmPick: null };
     C.S.battle = null;
     C.S.screen = 'reward';
   }
@@ -307,13 +312,31 @@ window.BATTLE = function (C) {
     return AD.resolveShowdown({ pres, eres: { score: -1, cat: 0 }, hole, pot: b.pot, charms: C.S.charms, enemy: b.enemy, deck: C.S.deck, allin: b.allin || (!!b.facing && b.facing.kind === 'allin') }).toEnemy;
   }
 
+  // 엿본 카드가 아직 다음 차례인지(보드 체인지로 바뀌었으면 아님)
+  const peeked = (b) => !!(b.peek && b.table[0] && b.peek.id === b.table[0].id);
+  const trickState = (b) => ({
+    phase: b.phase, street: b.street, facing: !!b.facing, hiddenCard: b.enemy.rule === 'hiddenCard', peeked: peeked(b),
+    hiddenEnemyCards: b.shown.filter((v) => !v).length, stared: b.stare,
+  });
+
+  // 손패 위 트릭 줄: 토큰을 눌러 고르고 [사용] 으로 확정. 못 쓰는 이유는 말풍선에.
+  function trickRow(b) {
+    const owned = C.S.tricks;
+    if (!owned.length || b.phase === 'end') return '';
+    const sel = ui.trickSel !== null && ui.trickSel < owned.length ? ui.trickSel : null;
+    const tokens = owned.map((id, i) => `<button class="trick${sel === i ? ' sel' : ''}" data-act="trickSel" data-arg="${i}" data-tip="${AD.TRICKS[id].name} · ${AD.TRICKS[id].desc}" aria-pressed="${sel === i}" aria-label="${AD.TRICKS[id].name}: ${AD.TRICKS[id].desc}">${V.icon(AD.TRICKS[id].icon)}</button>`).join('');
+    const why = sel === null ? '쓸 트릭을 먼저 고르세요' : AD.canUseTrick(owned[sel], trickState(b));
+    const use = sel === null ? '사용' : `사용 · ${AD.TRICKS[owned[sel]].name}`;
+    return `<div class="tricks" aria-label="트릭">${tokens}<span class="usewrap"${why ? ` data-tip="${why}"` : ''}>${btn(use, 'trickUse', undefined, 'primary sm', !!why)}</span></div>`;
+  }
+
   function vBattle() {
     const b = C.S.battle;
     const used = b.result && b.result.used ? b.result.used : [];
     const hideRiver = b.enemy.rule === 'hiddenCard' && b.phase !== 'end';
     const board = [
       ...b.board.map((c, i) => (hideRiver && i === 4 ? backHTML() : cardHTML(c, ui.swap ? { act: 'swap', arg: i, swap: true } : { used: used.includes(c.id) }))),
-      ...Array(5 - b.board.length).fill(slotHTML()),
+      ...Array(5 - b.board.length).fill(slotHTML()).map((slot, k) => (k === 0 && peeked(b) ? cardHTML(b.table[0], { peek: true }) : slot)),
     ].join('');
     // 손패는 높은 숫자부터, 손에 쥔 것처럼 살짝 부채꼴로
     const inHole = (c) => b.hole.some((h) => h.id === c.id);
@@ -356,6 +379,7 @@ window.BATTLE = function (C) {
       <div class="bottom">
         ${b.phase === 'end' ? resultLine(b) + reviewLine(b.result) : `<p class="hint">${hint}</p>`}
         ${status}
+        ${trickRow(b)}
         <section class="hand" aria-label="내 손패"><div class="cards${sorted.length > 5 ? ' six' : ''}">${hand}</div></section>
       </div>
       <div class="actions">${battleActions(b)}</div>
@@ -426,9 +450,28 @@ window.BATTLE = function (C) {
       if (!ui.swap || b.phase !== 'bet' || b.facing || b.changes < swapCost()) return;
       b.board = b.board.map((c, k) => (k === +i ? b.table[0] : c));
       b.table = b.table.slice(1);
+      b.peek = null;
       b.changes -= swapCost();
       ui.swap = false;
       readEnemy(b);
+    },
+    trickSel(i) { ui.trickSel = ui.trickSel === +i ? null : +i; },
+    trickUse() {
+      const b = C.S.battle;
+      const id = C.S.tricks[ui.trickSel];
+      if (!id) return toast('쓸 트릭을 먼저 고르세요');
+      const why = AD.canUseTrick(id, trickState(b));
+      if (why) return toast(why);
+      const msg = {
+        peek: () => { b.peek = { id: b.table[0].id }; return `다음 카드는 ${C.cardName(b.table[0])}`; },
+        mark: () => { reveal(b); return '상대 핸드 1장이 드러났다'; },
+        stare: () => { b.stare = true; return `${STREETS[b.street]} 상대가 흔들린다`; },
+        double: () => { b.pot += 2; b.committed = true; fx({ t: 'chip', allin: false }); return `팟 ×${b.pot}`; },
+      }[id]();
+      C.S.tricks = C.S.tricks.filter((_, k) => k !== ui.trickSel);
+      ui.trickSel = null;
+      log(`${AD.TRICKS[id].name} · ${msg}`);
+      toast(`${AD.TRICKS[id].name} · ${msg}`);
     },
     next() {
       if (C.S.hp <= 0) { C.S.screen = 'over'; return; }

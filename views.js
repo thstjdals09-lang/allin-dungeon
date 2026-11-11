@@ -7,6 +7,8 @@
   const icon = (n, c) => window.icon(n, c);
   // 강화 토큰: 둥근 색 토큰 + 흰 아이콘. 이름·설명은 data-tip 말풍선
   const sealHTML = (k, cls = '') => `<span class="seal seal-${k}${cls}" data-tip="${AD.ENCHANTS[k].name} · ${AD.ENCHANTS[k].desc}">${icon(AD.ENCHANTS[k].icon)}</span>`;
+  // 트릭 토큰: 둥근 아이콘. 이름·설명은 data-tip 말풍선
+  const trickToken = (k, cls = '') => `<span class="tricktoken${cls}" data-tip="${AD.TRICKS[k].name} · ${AD.TRICKS[k].desc}">${icon(AD.TRICKS[k].icon)}</span>`;
   const cardName = (c) => `${AD.SUITS[c.s]}${AD.rankLabel(c.r)}${c.en ? ` (${AD.ENCHANTS[c.en].name})` : ''}`;
 
   // 카드 앞면: 왼쪽 위·오른쪽 아래 모서리 숫자, 가운데는 무늬(그림 카드는 큰 글자)
@@ -14,12 +16,12 @@
     const fresh = !o.still && !seen.has(c.id);
     seen.add(c.id);
     const court = c.r >= 11;
-    const cls = ['card', c.s === 1 || c.s === 2 ? 'red' : 'black', court && 'court', c.en && 'en', o.sel && 'sel', o.used && 'used', o.dim && 'dim', o.swap && 'swappable', fresh && 'deal']
+    const cls = ['card', c.s === 1 || c.s === 2 ? 'red' : 'black', court && 'court', c.en && 'en', o.sel && 'sel', o.used && 'used', o.dim && 'dim', o.swap && 'swappable', o.peek && 'peeked', fresh && 'deal']
       .filter(Boolean).join(' ');
     const rank = AD.rankLabel(c.r);
     const suit = AD.SUITS[c.s];
     const idx = (pos) => `<span class="idx ${pos}"><b>${rank}</b><i>${suit}</i></span>`;
-    const en = c.en ? sealHTML(c.en) : '';
+    const en = (c.en ? sealHTML(c.en) : '') + (o.peek ? `<span class="eyemark" data-tip="엿보기 · 다음에 깔릴 카드">${icon('scan-eye')}</span>` : '');
     const inner = `${idx('tl')}<span class="pip">${court ? rank : suit}</span>${idx('br')}${en}`;
     const label = cardName(c);
     const style = o.style ? ` style="${o.style}"` : '';
@@ -51,6 +53,7 @@
     ['텔', '상대 표정. 상대마다 거짓말하는 정도가 다르다'],
     ['체인지', '판마다 2번. 손패 1장 교체에 1, 보드 1장 교체에 2'],
     ['상금', '매치에서 이기면 받는 돈. 상점에서 쓴다'],
+    ['트릭', '쓰면 사라지는 소모품. 최대 3개, 베팅 중에 쓴다'],
     ['유물', '갖고 있는 동안 계속 효과가 있는 아이템'],
   ];
   const TIPS = [
@@ -88,6 +91,8 @@
       ${enchantList()}`;
   }
 
+  const trickList = () => `<ul class="enlist">${AD.TRICK_IDS.map((k) => `<li>${trickToken(k, ' inline')}<b>${AD.TRICKS[k].name}</b> ${AD.TRICKS[k].desc}</li>`).join('')}</ul>`;
+
   // 도감: 만난 상대와 얻은 유물만 보이고, 나머지는 ???
   function codex(P) {
     const met = new Set(P.enemies);
@@ -102,6 +107,7 @@
     return `<h2 class="h">도감</h2>
       <h3 class="sub">상대 · ${met.size}/${AD.ENEMIES.length}</h3><ul class="codex">${enemies}</ul>
       <h3 class="sub">유물 · ${got.size}/${charmIds.length}</h3><ul class="plist">${charms}</ul>
+      <h3 class="sub">트릭 · ${AD.TRICK_IDS.length}종</h3>${trickList()}
       <h3 class="sub">카드 강화 · ${AD.ENCHANT_IDS.length}종</h3>${enchantList()}`;
   }
 
@@ -297,6 +303,7 @@
     icon, sealHTML, cardName, cardHTML, backHTML, slotHTML, btn, bar, toggle, KIND,
     resetSeen: () => seen.clear(),
     title, map, sheet,
+    trickToken,
     sheets: { howto, codex, records, settings, menu, charms, enemy, deck },
   };
 })();

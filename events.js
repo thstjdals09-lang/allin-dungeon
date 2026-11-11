@@ -1,7 +1,15 @@
 /* 올인 던전 — 이벤트(EVENTS)와 이벤트 화면. game.js 가 공유 컨텍스트 C 를 넘겨 부른다. */
 window.EVENTS_MOD = function (C) {
   'use strict';
-  const { ui, hurt, heal, gainCharm, newId, MIN_DECK, rnd, btn, cardName, toast } = C;
+  const { ui, hurt, heal, gainCharm, gainTrick, newId, MIN_DECK, rnd, btn, cardName, toast } = C;
+
+  // 트릭 이벤트 공통: 무작위 트릭 1개를 얻는다
+  const learnTrick = (lead) => {
+    const id = AD.pick(AD.TRICK_IDS, rnd);
+    gainTrick(id);
+    return `${lead}${AD.TRICKS[id].name}을(를) 얻었다.`;
+  };
+  const noRoom = (fallback) => AD.trickRoom(C.S.tricks.length) || fallback;
 
   const EVENTS = [
     {
@@ -52,6 +60,9 @@ window.EVENTS_MOD = function (C) {
       opts: [{
         label: '카드 1장 강화', ok: () => C.S.deck.some((c) => !c.en), no: '강화 안 된 카드가 없습니다',
         run: () => { ui.modal = { type: 'deck', purpose: 'enchant', en: AD.pick(AD.ENCHANT_IDS, rnd), from: 'event' }; return null; },
+      }, {
+        label: '스택 6을 내고 트릭 배우기', ok: () => C.S.hp > 6 && !AD.trickRoom(C.S.tricks.length), get no() { return noRoom('스택이 모자랍니다'); },
+        run: () => { hurt(6); return learnTrick('"눈치로 배우는 거야." '); },
       }],
     },
     {
@@ -83,6 +94,9 @@ window.EVENTS_MOD = function (C) {
           C.S.gold += 40;
           return `${cardName(c)}을(를) 뺏겼다. 상금 40을 받았다.`;
         },
+      }, {
+        label: '상금 35 · 트릭 1개 사기', ok: () => C.S.gold >= 35 && !AD.trickRoom(C.S.tricks.length), get no() { return noRoom('상금이 모자랍니다'); },
+        run: () => { C.S.gold -= 35; return learnTrick('소매에서 무언가를 꺼내 건넸다. '); },
       }],
     },
     {

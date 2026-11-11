@@ -2,8 +2,8 @@
    배경 그림은 scenes.js(SCENES), 연출은 fx.js(FX). */
 (function () {
   'use strict';
-  const VERSION = 8; // v8: 캐릭터(char)·난이도(level)·오늘의 도전(daily·rngState)이 생겼다. v7: 이벤트 본 기록(seenEvents)·층 버프(floorBuff)·알아낸 보스(bossId)가 생겼다. v6: v6: 카드 복제 비용(dupCost)이 생겼다. v5: v5: 상대 고유 규칙(enemy.rule)·강제 올인 facing 이 생겼다. v4: 상대 벳·레이즈(battle.facing)가 생겨 v3 전투 저장과 다르다. v3: 층 지도가 갈림길(map·path)로 바뀌어 v2 저장과 형식이 다르다
-  const SAVE_KEY = 'allin-dungeon-v8';
+  const VERSION = 9; // v9: 트릭(S.tricks·보상 trick·상점 tricks)이 생겼다. v8: 캐릭터(char)·난이도(level)·오늘의 도전(daily·rngState)이 생겼다. v7: 이벤트 본 기록(seenEvents)·층 버프(floorBuff)·알아낸 보스(bossId)가 생겼다. v6: v6: 카드 복제 비용(dupCost)이 생겼다. v5: v5: 상대 고유 규칙(enemy.rule)·강제 올인 facing 이 생겼다. v4: 상대 벳·레이즈(battle.facing)가 생겨 v3 전투 저장과 다르다. v3: 층 지도가 갈림길(map·path)로 바뀌어 v2 저장과 형식이 다르다
+  const SAVE_KEY = 'allin-dungeon-v9';
   const PROFILE_KEY = 'allin-dungeon-profile';
   const START_STACK = 80;
   const MIN_DECK = 8;
@@ -22,7 +22,7 @@
   };
   // 저장하지 않는 화면 상태. fx = 이번 클릭에서 일어난 일(fx.js 가 연출), from = 누른 버튼 위치
   // mapSel = 지도에서 눌러 둔 칸(들어가기 전 확인용)
-  let ui = { modal: null, swap: false, toast: '', fx: [], from: null, screen: null, mapSel: null, restPick: null, shopPick: null };
+  let ui = { modal: null, swap: false, toast: '', fx: [], from: null, screen: null, mapSel: null, restPick: null, shopPick: null, trickSel: null };
   const { cardName, cardHTML, backHTML, slotHTML, btn, bar } = V;
 
   const has = (k) => S.charms.includes(k);
@@ -61,17 +61,19 @@
     ui.mapSel = null;
     ui.restPick = null;
     ui.shopPick = null;
+    ui.trickSel = null;
     const hero = META.charOf(char);
     const stack = META.startStack(hero.id, level);
     // 지도·덱을 만들 때 rnd 가 S.rngState 를 쓰도록 S 를 먼저 세우고 채운다
     S = {
-      v: VERSION, screen: 'map', hp: stack, maxHp: stack, gold: hero.gold || 40, deck: [], charms: [], char: hero.id, level, daily,
+      v: VERSION, screen: 'map', hp: stack, maxHp: stack, gold: hero.gold || 40, deck: [], charms: [], tricks: [], char: hero.id, level, daily,
       rngState: daily ? AD.seedFromDate(daily) : 0,
       floor: 1, step: 0, node: null, map: null, path: [], removeCost: META.price(50, level), dupCost: META.price(60, level), nextId: 0, seenEvents: [], floorBuff: null, bossId: null,
       stats: { hands: 0, won: 0, best: -1, kills: 0 },
     };
     S.map = AD.genFloorMap(rnd);
     S.deck = AD.starterDeck(newId, rnd);
+    S.tricks = [AD.pick(AD.TRICK_IDS, rnd)];
     if (hero.charm) gainCharm(hero.charm);
     note({ runs: P.runs + 1, bestFloor: Math.max(P.bestFloor, 1) });
   }
@@ -120,10 +122,12 @@
     if (id === 'pact') { S.maxHp -= 12; S.hp = Math.min(S.hp, S.maxHp); }
   }
 
+  const gainTrick = (id) => { if (!AD.trickRoom(S.tricks.length)) S.tricks = [...S.tricks, id]; };
+
   // 전투·이벤트 파일에 넘기는 공유 컨텍스트. S·P 는 다시 대입되므로 getter 로 건넨다.
   const C = {
     get S() { return S; }, get P() { return P; },
-    ui, fx, has, hurt, heal, toast, newId, note, remember, swapCost, gainCharm, cardName,
+    ui, fx, has, hurt, heal, toast, newId, note, remember, swapCost, gainCharm, gainTrick, cardName,
     bonusChanges: () => (has('coin') ? 1 : 0) + (S.char === 'ace' ? 1 : 0) + ((S.floorBuff && S.floorBuff.changes) || 0),
     rnd, btn, MIN_DECK, CHANGES, STREETS,
   };
@@ -145,7 +149,9 @@
     const card = r.cardPick !== null && r.cardPick !== undefined ? r.cards[r.cardPick] : null;
     if (card) S.deck = [...S.deck, card];
     if (r.charmPick) gainCharm(r.charmPick);
-    if (card || r.charmPick) fx({ t: 'coin' });
+    const trick = r.trickPick && r.trick && !AD.trickRoom(S.tricks.length);
+    if (trick) gainTrick(r.trick);
+    if (card || r.charmPick || trick) fx({ t: 'coin' });
   }
 
   /* ───────── 상점·이벤트 ───────── */
@@ -156,15 +162,18 @@
         return { card, price: META.price(card.en ? 55 : 30, S.level), sold: false };
       }),
       charms: AD.randomCharms(2, S.charms, rnd).map((id) => ({ id, price: META.price(100 + Math.floor(rnd() * 4) * 10, S.level), sold: false })),
+      tricks: AD.shopTricks(rnd).map((x) => ({ id: x.id, price: META.price(x.price, S.level), sold: false })),
     };
     ui.shopPick = null;
     S.screen = 'shop';
   }
 
 
+  const SHOP_KEY = { card: 'cards', charm: 'charms', trick: 'tricks' };
   function shopToggle(kind, i) {
-    const item = S.shop[kind === 'card' ? 'cards' : 'charms'][i];
+    const item = S.shop[SHOP_KEY[kind]][i];
     if (!item || item.sold) return;
+    if (kind === 'trick' && AD.trickRoom(S.tricks.length)) return toast(AD.trickRoom(S.tricks.length));
     const p = ui.shopPick;
     ui.shopPick = p && p.kind === kind && p.i === i ? null : { kind, i };
   }
@@ -202,6 +211,7 @@
     },
     // 보상은 고르기만 하고 떠날 때 확정한다. 다시 누르면 취소, 다른 걸 누르면 바뀐다.
     takeCard(i) { const r = S.reward; S.reward = { ...r, cardPick: r.cardPick === +i ? null : +i }; },
+    takeTrick() { const r = S.reward; if (!r.trick) return; const full = AD.trickRoom(S.tricks.length); if (full) return toast(full); S.reward = { ...r, trickPick: !r.trickPick }; },
     takeCharm(id) { const r = S.reward; S.reward = { ...r, charmPick: r.charmPick === id ? null : id }; },
     leave() {
       if (S.screen === 'reward') takeReward();
@@ -210,16 +220,18 @@
     // 상점은 고르기만 하고 [구매] 로 확정한다. 다시 누르면 취소, 다른 걸 누르면 바뀐다.
     buyCard(i) { shopToggle('card', +i); },
     buyCharm(i) { shopToggle('charm', +i); },
+    buyTrick(i) { shopToggle('trick', +i); },
     shopCancel() { ui.shopPick = null; },
     buy() {
       const p = ui.shopPick;
-      const item = p && S.shop[p.kind === 'card' ? 'cards' : 'charms'][p.i];
+      const item = p && S.shop[SHOP_KEY[p.kind]][p.i];
       if (!item || item.sold) { ui.shopPick = null; return; }
+      if (p.kind === 'trick' && AD.trickRoom(S.tricks.length)) return toast(AD.trickRoom(S.tricks.length));
       if (S.gold < item.price) return toast('상금이 모자랍니다');
       S.gold -= item.price;
       fx({ t: 'coin' });
-      if (p.kind === 'card') S.deck = [...S.deck, item.card]; else gainCharm(item.id);
-      const key = p.kind === 'card' ? 'cards' : 'charms';
+      if (p.kind === 'card') S.deck = [...S.deck, item.card]; else if (p.kind === 'trick') gainTrick(item.id); else gainCharm(item.id);
+      const key = SHOP_KEY[p.kind];
       S.shop = { ...S.shop, [key]: S.shop[key].map((x, k) => (k === p.i ? { ...x, sold: true } : x)) };
       ui.shopPick = null;
     },
@@ -347,6 +359,15 @@
     return `<small class="same">${taken ? `덱에 ${AD.rankLabel(c.r)} ${n}장` : `넣으면 ${AD.rankLabel(c.r)} ${n + 1}장`}</small>`;
   }
 
+  // 트릭 후보 한 줄. 칸이 가득 차면 고를 수 없고 이유를 보인다.
+  function trickOffer(r) {
+    if (!r.trick) return '';
+    const t = AD.TRICKS[r.trick];
+    const full = AD.trickRoom(S.tricks.length);
+    return `<h3 class="sub">트릭 1개 · 고르지 않아도 됩니다</h3><div class="charmrow"><button class="charmcard trickcard${r.trickPick ? ' chosen' : ''}" data-act="takeTrick" aria-pressed="${!!r.trickPick}"${full ? ' disabled' : ''}>
+      <b>${V.trickToken(r.trick, ' inline')}${t.name}</b><span>${t.desc}</span></button></div>${full ? `<p class="note">${full}</p>` : ''}`;
+  }
+
   function vReward() {
     const r = S.reward;
     const cards = r.cards.map((c, i) => `<div class="offer${r.cardPick === i ? ' picked' : ''}">
@@ -358,13 +379,14 @@
       ? `<h3 class="sub">유물 1개 · 고르지 않아도 됩니다</h3><div class="charmrow">${r.charms.map((id) =>
         `<button class="charmcard${r.charmPick === id ? ' chosen' : ''}" data-act="takeCharm" data-arg="${id}" aria-pressed="${r.charmPick === id}"><b>${AD.CHARMS[id].name}</b><span>${AD.CHARMS[id].desc}</span></button>`).join('')}</div>`
       : '';
-    const picked = (r.cardPick !== null && r.cardPick !== undefined) || r.charmPick;
+    const picked = (r.cardPick !== null && r.cardPick !== undefined) || r.charmPick || r.trickPick;
     return `<main class="screen reward">
       <p class="eyebrow">매치 승리</p>
       <h2 class="h">상금 +<span class="count num" data-n="${r.gold}">${r.gold}</span></h2>
       <h3 class="sub">덱에 넣을 카드 1장 · 다시 누르면 취소</h3>
       <div class="offers">${cards}</div>
       ${charms}
+      ${trickOffer(r)}
       <div class="actions">${picked ? btn('가져가고 계속', 'leave', undefined, 'primary wide') : btn('아무것도 안 받고 계속', 'leave', undefined, 'ghost wide')}</div>
     </main>`;
   }
@@ -372,11 +394,12 @@
   // 고른 것의 이름·설명·값과 [구매]. 고르는 동안 제거·나가기 줄 바로 위에 붙는다.
   function shopPanel(pk) {
     const isCard = pk.kind === 'card';
-    const item = S.shop[isCard ? 'cards' : 'charms'][pk.i];
-    const name = isCard ? cardName(item.card) : AD.CHARMS[item.id].name;
+    const item = S.shop[SHOP_KEY[pk.kind]][pk.i];
+    const pool = pk.kind === 'trick' ? AD.TRICKS : AD.CHARMS;
+    const name = isCard ? cardName(item.card) : pool[item.id].name;
     const desc = isCard
       ? `${item.card.en ? AD.ENCHANTS[item.card.en].desc : '강화 없음'} · 넣으면 ${AD.rankLabel(item.card.r)} ${S.deck.filter((d) => d.r === item.card.r).length + 1}장`
-      : AD.CHARMS[item.id].desc;
+      : pool[item.id].desc;
     const short = item.price - S.gold;
     const buyBtn = short > 0
       ? btn(`상금이 ${short} 모자랍니다`, 'buy', undefined, 'primary wide', true)
@@ -394,6 +417,9 @@
         ${sameRank(x.card, x.sold)}
         <b class="price num">${x.sold ? '구매함' : `${x.price}`}</b>
       </div>`).join('');
+    const full = AD.trickRoom(S.tricks.length);
+    const tricks = sh.tricks.map((x, i) => `<button class="charmcard trickcard${pk && pk.kind === 'trick' && pk.i === i ? ' chosen' : ''}" data-act="buyTrick" data-arg="${i}" aria-pressed="${!!pk && pk.kind === 'trick' && pk.i === i}"${x.sold || full ? ' disabled' : ''}>
+        <b>${V.trickToken(x.id, ' inline')}${AD.TRICKS[x.id].name}</b><span>${AD.TRICKS[x.id].desc}</span><em class="num">${x.sold ? '구매함' : `${x.price}`}</em></button>`).join('');
     const charms = sh.charms.map((x, i) => `<button class="charmcard${pk && pk.kind === 'charm' && pk.i === i ? ' chosen' : ''}" data-act="buyCharm" data-arg="${i}" aria-pressed="${!!pk && pk.kind === 'charm' && pk.i === i}"${x.sold ? ' disabled' : ''}>
         <b>${AD.CHARMS[x.id].name}</b><span>${AD.CHARMS[x.id].desc}</span><em class="num">${x.sold ? '구매함' : `${x.price}`}</em></button>`).join('');
     return `<main class="screen shop">
@@ -401,6 +427,7 @@
       <h2 class="h">카드와 유물</h2>
       <h3 class="sub">카드 · 눌러서 고르기</h3><div class="offers">${cards}</div>
       ${sh.charms.length ? `<h3 class="sub">유물</h3><div class="charmrow">${charms}</div>` : ''}
+      <h3 class="sub">트릭 · 쓰면 사라지는 소모품 (${S.tricks.length}/${AD.MAX_TRICKS})</h3><div class="charmrow">${tricks}</div>${full ? `<p class="note">${full}</p>` : ''}
       <h3 class="sub">카드 제거</h3>
       <p class="note">덱이 얇을수록 좋은 카드가 자주 들어옵니다. 제거할 때마다 값이 25씩 오릅니다.</p>
       <h3 class="sub">카드 복제</h3>
