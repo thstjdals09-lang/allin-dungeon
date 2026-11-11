@@ -48,6 +48,12 @@
     bandage: { name: '붕대', desc: '매치가 끝나면 스택 +6' },
     bribe: { name: '딜러 매수', desc: '보드 체인지가 체인지 1로 된다 (보통 2)' },
     shoes: { name: '도망자 신발', desc: '폴드해도 칩을 잃지 않는다' },
+    suits: { name: '무늬 수집가', desc: '덱에서 가장 많은 무늬가 8장 이상이면 플러시 족보 값 ×2' },
+    mirror2: { name: '쌍둥이 거울', desc: '덱에 같은 숫자가 3장 이상인 숫자가 있으면 페어·트리플·풀하우스·포카드 족보 값 ×1.5' },
+    ladder: { name: '사다리', desc: '덱에 연속된 숫자가 6개 이상이면 스트레이트 족보 값 ×2' },
+    bluffbadge: { name: '허풍선이 배지', desc: '상대가 폴드할 때마다 상금 +4, 상대가 잃는 칩 +2' },
+    junkie: { name: '올인 중독', desc: '올인으로 간 판을 이기면 족보 값 +12, 지면 잃는 칩 +4' },
+    slim: { name: '얇은 지갑', desc: '덱이 14장 이하면 모든 족보 값 +4' },
   };
 
   // mul: 상대가 이길 때 족보 값 배수 · tight: 벳에 폴드하는 정도(0이면 폴드 안 함)
@@ -242,15 +248,36 @@
   // 하우스: 리버(다섯 번째 보드 카드)는 쇼다운 전까지 내게 안 보인다
   const visibleBoard = (enemy, board, ended) => (enemy.rule === 'hiddenCard' && !ended ? board.slice(0, 4) : board);
 
-  const foldDamage = (pot) => ANTE * pot;
+  const foldDamage = (pot, charms = []) => ANTE * pot + (charms.includes('bluffbadge') ? 2 : 0);
+
+  // 덱 구성에 따른 족보 값 배수(내 덱 전체 기준). 해당 족보가 아니거나 조건이 안 되면 1
+  function deckMult(cat, deck, has) {
+    if (has('suits') && (cat === 5 || cat === 8)) {
+      const n = [0, 1, 2, 3].map((s) => deck.filter((c) => c.s === s).length);
+      if (Math.max(...n) >= 8) return 2;
+    }
+    if (has('mirror2') && [1, 2, 3, 6, 7, 9].includes(cat)) {
+      const n = {};
+      deck.forEach((c) => { n[c.r] = (n[c.r] || 0) + 1; });
+      if (Object.values(n).some((k) => k >= 3)) return 1.5;
+    }
+    if (has('ladder') && (cat === 4 || cat === 8)) {
+      const ranks = new Set(deck.map((c) => c.r));
+      let run = 0;
+      for (let r = 2; r <= 14; r++) { run = ranks.has(r) ? run + 1 : 0; if (run >= 6) return 2; }
+    }
+    return 1;
+  }
 
   // 쇼다운: 진 쪽이 (족보 값 + 보너스) × 팟 만큼 칩을 잃는다. 방어는 마지막에 뺀다.
-  function resolveShowdown({ pres, eres, hole, pot, charms, enemy }) {
+  function resolveShowdown({ pres, eres, hole, pot, charms, enemy, deck = [], allin = false }) {
     const has = (k) => charms.includes(k);
     const count = (en) => hole.filter((c) => c.en === en).length;
     const out = { winner: 0, toEnemy: 0, toPlayer: 0, heal: 0, enemyHeal: 0 };
     if (pres.score > eres.score) {
-      let base = HANDS[pres.cat].value + (isRoyal(pres) ? ROYAL_BONUS : 0) + 4 * count('fire');
+      let base = HANDS[pres.cat].value * deckMult(pres.cat, deck, has) + (isRoyal(pres) ? ROYAL_BONUS : 0) + 4 * count('fire');
+      if (has('slim') && deck.length <= 14) base += 4;
+      if (has('junkie') && allin) base += 12;
       if (has('fry') && pres.cat <= 1) base += 6;
       if (has('tattoo') && (pres.cat === 5 || pres.cat === 8)) base += 10;
       if (has('ruler') && (pres.cat === 4 || pres.cat === 8)) base += 10;
@@ -262,7 +289,7 @@
       const raw = Math.round(HANDS[eres.cat].value * pot * enemy.mul);
       const block = 4 * count('steel') + (has('ironchip') ? 2 : 0);
       out.winner = -1;
-      out.toPlayer = Math.max(0, raw - block);
+      out.toPlayer = Math.max(0, raw + (has('junkie') && allin ? 4 : 0) - block);
       out.enemyHeal = enemy.heal || 0;
     }
     return out;

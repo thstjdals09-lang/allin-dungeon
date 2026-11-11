@@ -2,8 +2,8 @@
    배경 그림은 scenes.js(SCENES), 연출은 fx.js(FX). */
 (function () {
   'use strict';
-  const VERSION = 5; // v5: 상대 고유 규칙(enemy.rule)·강제 올인 facing 이 생겼다. v4: 상대 벳·레이즈(battle.facing)가 생겨 v3 전투 저장과 다르다. v3: 층 지도가 갈림길(map·path)로 바뀌어 v2 저장과 형식이 다르다
-  const SAVE_KEY = 'allin-dungeon-v5';
+  const VERSION = 6; // v6: 카드 복제 비용(dupCost)이 생겼다. v5: v5: 상대 고유 규칙(enemy.rule)·강제 올인 facing 이 생겼다. v4: 상대 벳·레이즈(battle.facing)가 생겨 v3 전투 저장과 다르다. v3: 층 지도가 갈림길(map·path)로 바뀌어 v2 저장과 형식이 다르다
+  const SAVE_KEY = 'allin-dungeon-v6';
   const PROFILE_KEY = 'allin-dungeon-profile';
   const START_STACK = 80;
   const MIN_DECK = 8;
@@ -56,7 +56,7 @@
     ui.restPick = null;
     S = {
       v: VERSION, screen: 'map', hp: START_STACK, maxHp: START_STACK, gold: 40, deck: [], charms: [],
-      floor: 1, step: 0, node: null, map: AD.genFloorMap(rnd), path: [], removeCost: 50, nextId: 0,
+      floor: 1, step: 0, node: null, map: AD.genFloorMap(rnd), path: [], removeCost: 50, dupCost: 60, nextId: 0,
       stats: { hands: 0, won: 0, best: -1, kills: 0 },
     };
     S.deck = AD.starterDeck(newId, rnd);
@@ -183,12 +183,21 @@
       if (S.deck.length <= MIN_DECK) return toast(`덱이 ${MIN_DECK}장 이하라 더 뺄 수 없습니다`);
       ui.modal = { type: 'deck', purpose: 'remove', cost: S.removeCost, from: 'shop' };
     },
+    dupOpen() {
+      if (S.gold < S.dupCost) return toast('상금이 모자랍니다');
+      ui.modal = { type: 'deck', purpose: 'dup', cost: S.dupCost, from: 'shop' };
+    },
     // 휴게실: 고르기(바꿀 수 있음) → 결정. 강화는 결정한 뒤 카드를 고른다.
     restPick(k) { ui.restPick = ui.restPick === k ? null : k; },
     restGo() {
       const k = ui.restPick;
       if (!k) return toast('하나를 먼저 고르세요');
       if (k === 'rest') { heal(Math.ceil(S.maxHp * 0.3)); advance(); return; }
+      if (k === 'rankup') {
+        if (!S.deck.some((c) => c.r < 14)) return toast('단련할 카드가 없습니다');
+        ui.modal = { type: 'deck', purpose: 'rankup', from: 'rest' };
+        return;
+      }
       if (!S.deck.some((c) => !c.en)) return toast('강화 안 된 카드가 없습니다');
       ui.modal = { type: 'deck', purpose: 'enchant', en: k, from: 'rest' };
     },
@@ -205,6 +214,17 @@
         if (m.cost) { S.gold -= m.cost; S.removeCost += 25; }
         if (m.from === 'event') S.event = { ...S.event, done: `${cardName(card)}을(를) 덱에서 뺐다.` };
         else toast(`${cardName(card)} 제거`);
+        return;
+      }
+      if (m.purpose === 'dup') {
+        S.gold -= m.cost; S.dupCost += 20;
+        S.deck = [...S.deck, { ...card, id: newId(), en: null }];
+        toast(`${cardName(card)} 복제`);
+        return;
+      }
+      if (m.purpose === 'rankup') {
+        S.deck = S.deck.map((c) => (c.id === id ? { ...c, r: c.r + 1 } : c));
+        advance();
         return;
       }
       S.deck = S.deck.map((c) => (c.id === id ? { ...c, en: m.en } : c));
@@ -299,6 +319,9 @@
       ${sh.charms.length ? `<h3 class="sub">유물</h3><div class="charmrow">${charms}</div>` : ''}
       <h3 class="sub">카드 제거</h3>
       <p class="note">덱이 얇을수록 좋은 카드가 자주 들어옵니다. 제거할 때마다 값이 25씩 오릅니다.</p>
+      <h3 class="sub">카드 복제</h3>
+      <p class="note">고른 카드의 강화 없는 사본을 덱에 넣습니다. 쓸 때마다 값이 20씩 오릅니다.</p>
+      <div class="actions">${btn(`카드 복제 · ${S.dupCost}`, 'dupOpen', undefined, 'ghost')}</div>
       <div class="actions">${btn(`카드 제거 · ${S.removeCost}`, 'removeOpen', undefined, 'ghost')}${btn('나가기', 'leave', undefined, 'primary')}</div>
     </main>`;
   }
@@ -310,13 +333,14 @@
       `<button class="charmcard${pick === key ? ' chosen' : ''}" data-act="restPick" data-arg="${key}" aria-pressed="${pick === key}"><b>${title}</b><span>${desc}</span></button>`;
     const offers = S.rest.offers.map((en) =>
       opt(en, `<span class="seal seal-${en} inline">${AD.ENCHANTS[en].seal}</span>${AD.ENCHANTS[en].name} 강화`, AD.ENCHANTS[en].desc)).join('');
-    const go = pick === 'rest' ? `쉬기 · 스택 +${heal}` : pick ? '강화할 카드 고르기' : '결정';
+    const go = pick === 'rest' ? `쉬기 · 스택 +${heal}` : pick ? (pick === 'rankup' ? '단련할 카드 고르기' : '강화할 카드 고르기') : '결정';
     return `<main class="screen rest">
       <p class="eyebrow">휴게실</p>
       <h2 class="h">하나만 고르세요.</h2>
       <div class="charmrow">
         ${opt('rest', '쉬기', `스택 +${heal} (지금 ${S.hp}/${S.maxHp})`)}
         ${offers}
+        ${opt('rankup', '카드 단련', '카드 1장의 숫자 +1 (A 는 안 됨, 강화는 그대로)')}
       </div>
       <p class="note">고른 뒤에도 결정 전까지 바꿀 수 있습니다. 강화는 아직 강화되지 않은 카드에만 됩니다.</p>
       <div class="actions">${btn('그냥 지나가기', 'leave', undefined, 'ghost')}${btn(go, 'restGo', undefined, 'primary', !pick)}</div>

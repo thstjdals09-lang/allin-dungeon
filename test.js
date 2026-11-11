@@ -57,6 +57,41 @@ assert.strictEqual(out.winner, 0, '스플릿은 아무도 안 잃음');
 out = AD.resolveShowdown({ pres: best('9s 8h 2d 3c 5s Kd Qh'), eres: best('9s 8h 2d 3c 4s Kd Jh'), hole: [], pot: 1, charms: [], enemy: { mul: 1, armor: 9 } });
 assert.strictEqual(out.toEnemy, 1, '방어가 커도 이기면 최소 1');
 
+// 빌드 유물: 덱 조건과 배수 순서(배수 먼저, 그 뒤 고정 보너스)
+{
+  const mk = (list) => list.map(([r, s], i) => ({ id: `d${i}`, r, s, en: null }));
+  const plain = { mul: 1, armor: 0 };
+  const win = (cat, charms, deck, allin = false, pot = 1) =>
+    AD.resolveShowdown({ pres: { score: 2, cat, tb: [9] }, eres: { score: 1, cat: 0, tb: [2] }, hole: [], pot, charms, enemy: plain, deck, allin }).toEnemy;
+  const spades8 = mk(Array.from({ length: 8 }, (_, i) => [2 + i, 0]));
+  const spades7 = mk(Array.from({ length: 7 }, (_, i) => [2 + i, 0]));
+  assert.strictEqual(win(5, ['suits'], spades8), 24, '무늬 8장 → 플러시 ×2');
+  assert.strictEqual(win(5, ['suits'], spades7), 12, '7장이면 그대로');
+  assert.strictEqual(win(4, ['suits'], spades8), 11, '플러시가 아니면 그대로');
+  assert.strictEqual(win(5, ['suits', 'tattoo'], spades8), 24 + 10, '배수 뒤에 고정 보너스');
+  const trips = mk([[5, 0], [5, 1], [5, 2], [9, 0]]);
+  assert.strictEqual(win(1, ['mirror2'], trips), 6, '원페어 4×1.5');
+  assert.strictEqual(win(6, ['mirror2'], trips), 23, '풀하우스 15×1.5=22.5 → 반올림');
+  assert.strictEqual(win(5, ['mirror2'], trips), 12, '플러시는 해당 없음');
+  assert.strictEqual(win(1, ['mirror2'], mk([[5, 0], [5, 1], [9, 0]])), 4, '2장뿐이면 그대로');
+  const run6 = mk([3, 4, 5, 6, 7, 8].map((r) => [r, 0]));
+  const run5 = mk([3, 4, 5, 6, 7, 9].map((r) => [r, 0]));
+  assert.strictEqual(win(4, ['ladder'], run6), 22, '연속 6 → 스트레이트 ×2');
+  assert.strictEqual(win(8, ['ladder'], run6), 60);
+  assert.strictEqual(win(4, ['ladder'], run5), 11, '연속 5까지면 그대로');
+  assert.strictEqual(win(4, ['ladder', 'ruler'], run6), 22 + 10);
+  assert.strictEqual(win(0, ['slim'], mk(Array.from({ length: 14 }, (_, i) => [2 + (i % 13), 0]))), 2 + 4, '덱 14장 → +4');
+  assert.strictEqual(win(0, ['slim'], mk(Array.from({ length: 15 }, (_, i) => [2 + (i % 13), 0]))), 2, '15장이면 그대로');
+  assert.strictEqual(win(1, ['junkie'], [], true), 4 + 12, '올인 승리 +12');
+  assert.strictEqual(win(1, ['junkie'], [], false), 4, '올인 아니면 그대로');
+  const lose = (charms, allin) => AD.resolveShowdown({ pres: { score: 1, cat: 0, tb: [2] }, eres: { score: 2, cat: 1, tb: [9] }, hole: [], pot: 2, charms, enemy: plain, deck: [], allin }).toPlayer;
+  assert.strictEqual(lose(['junkie'], true), 8 + 4, '올인 패배 +4');
+  assert.strictEqual(lose(['junkie'], false), 8);
+  assert.strictEqual(lose(['junkie', 'ironchip'], true), 8 + 4 - 2);
+  assert.strictEqual(AD.foldDamage(3, ['bluffbadge']), 6 + 2, '허풍선이 배지: 폴드 피해 +2');
+  assert.strictEqual(AD.foldDamage(3), 6);
+}
+
 // 폴드 안 하는 상대, 약한 패는 올인에 폴드, 센 패는 벳에 콜
 assert.strictEqual(AD.enemyFolds({ tight: 0 }, 0, true), false);
 assert.strictEqual(AD.enemyFolds({ tight: 1 }, 0.1, true, 1, () => 0.5), true);

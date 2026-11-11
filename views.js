@@ -177,16 +177,18 @@
   // 강화·제거할 카드 고르기: 누르면 고르기만(다시 누르면 취소), 아래 확인 버튼에서 적용, 닫기로 그만두기
   function deck(m, S) {
     const picking = m.purpose;
+    const blocked = (c) => (picking === 'enchant' && !!c.en) || (picking === 'rankup' && c.r >= 14);
     const list = S.deck.slice().sort((a, b) => b.r - a.r || a.s - b.s)
-      .map((c) => (picking && !(picking === 'enchant' && c.en)
+      .map((c) => (picking && !blocked(c)
         ? cardHTML(c, { act: 'pickDeck', still: true, sel: m.pick === c.id })
-        : cardHTML(c, { still: true, dim: picking === 'enchant' && !!c.en })))
+        : cardHTML(c, { still: true, dim: blocked(c) })))
       .join('');
     const chosen = m.pick && S.deck.find((c) => c.id === m.pick);
     const confirm = !picking ? ''
       : `<div class="confirm"><span>${chosen ? `고른 카드 <b>${cardName(chosen)}</b>` : '카드를 누르세요. 다시 누르면 취소됩니다.'}</span>
-         ${btn(picking === 'remove' ? `제거하기${m.cost ? ` · ${m.cost}` : ''}` : `${AD.ENCHANTS[m.en].name} 강화하기`, 'deckConfirm', undefined, 'primary', !chosen)}</div>`;
+         ${btn(picking === 'remove' ? `제거하기${m.cost ? ` · ${m.cost}` : ''}` : picking === 'dup' ? `복제하기 · ${m.cost}` : picking === 'rankup' ? '단련하기 (숫자 +1)' : `${AD.ENCHANTS[m.en].name} 강화하기`, 'deckConfirm', undefined, 'primary', !chosen)}</div>`;
     const head = picking === 'remove' ? `제거할 카드${m.cost ? ` · ${m.cost}` : ''}`
+      : picking === 'dup' ? `복제할 카드 · ${m.cost}` : picking === 'rankup' ? '단련할 카드 (숫자 +1)'
       : picking === 'enchant' ? `${AD.ENCHANTS[m.en].name} 강화할 카드` : `내 덱 · ${S.deck.length}장`;
     const suits = AD.SUITS.map((s, i) => `${s} ${S.deck.filter((c) => c.s === i).length}`).join(' · ');
     const high = S.deck.filter((c) => c.r >= 11).length;

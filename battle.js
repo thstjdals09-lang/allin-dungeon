@@ -71,6 +71,7 @@ window.BATTLE = function (C) {
     b.changes = Math.max(0, CHANGES + (has('coin') ? 1 : 0) - (b.enemy.rule === 'stealChange' ? 1 : 0));
     b.result = null;
     b.facing = null;
+    b.allin = false;
     b.phase = 'pick';
     ui.swap = false;
     readEnemy(b);
@@ -113,8 +114,9 @@ window.BATTLE = function (C) {
     const where = `${STREETS[b.street]}${b.facing ? ` 상대 ${b.facing.kind === 'bet' ? '벳' : '레이즈'} →` : ''} ${allin ? '올인' : word}`;
     const act = AD.enemyAct(b.enemy, b.str, allin ? 'allin' : canReraise ? 'bet' : 'raise', rnd, has('face') ? 1.25 : 1);
     if (act === 'fold') {
-      const d = AD.foldDamage(b.pot);
+      const d = AD.foldDamage(b.pot, C.S.charms);
       payGold(b);
+      if (has('bluffbadge')) { C.S.gold += 4; log('허풍선이 배지 · 상금 +4'); }
       b.enemy.hp -= d;
       b.shown = b.shown.map(() => true);
       fx({ t: 'efold', d, kill: b.enemy.hp <= 0 });
@@ -130,6 +132,7 @@ window.BATTLE = function (C) {
 
   // 올인이면 남은 카드를 다 깔고 바로 쇼다운
   function runOut(b) {
+    b.allin = true;
     const need = 5 - b.board.length;
     b.board = [...b.board, ...b.table.slice(0, need)];
     b.table = b.table.slice(need);
@@ -163,7 +166,7 @@ window.BATTLE = function (C) {
   function showdown(b) {
     const pres = AD.best([...b.hole, ...b.board]);
     const eres = AD.best([...b.ehole, ...b.board]);
-    const out = AD.resolveShowdown({ pres, eres, hole: b.hole, pot: b.pot, charms: C.S.charms, enemy: b.enemy });
+    const out = AD.resolveShowdown({ pres, eres, hole: b.hole, pot: b.pot, charms: C.S.charms, enemy: b.enemy, deck: C.S.deck, allin: b.allin });
     payGold(b);
     b.shown = b.shown.map(() => true);
     b.enemy.hp = Math.min(b.enemy.maxHp, b.enemy.hp - out.toEnemy + out.enemyHeal);
@@ -280,7 +283,7 @@ window.BATTLE = function (C) {
 
   // 지금 패 그대로 이기면 상대가 잃을 칩 — 규칙 엔진의 계산을 그대로 쓴다
   function winIfNow(b, hole, pres) {
-    return AD.resolveShowdown({ pres, eres: { score: -1, cat: 0 }, hole, pot: b.pot, charms: C.S.charms, enemy: b.enemy }).toEnemy;
+    return AD.resolveShowdown({ pres, eres: { score: -1, cat: 0 }, hole, pot: b.pot, charms: C.S.charms, enemy: b.enemy, deck: C.S.deck, allin: b.allin || (!!b.facing && b.facing.kind === 'allin') }).toEnemy;
   }
 
   function vBattle() {
