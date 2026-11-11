@@ -90,6 +90,12 @@ for (let k = 0; k < 500; k++) {
 // 층마다 일반·엘리트·보스가 다 있다
 for (let f = 1; f <= AD.FLOORS; f++) for (const k of ['normal', 'elite', 'boss']) assert(AD.pickEnemy(f, k).name, `${f}층 ${k}`);
 
+// 옛 저장의 보상: 이미 받은 카드·유물은 비워 다시 받지 못하게, 새 형식은 그대로
+const oldSave = { reward: { gold: 9, cards: [1, 2, 3], charms: ['coin'], cardDone: true, charmDone: false, took: 1 } };
+assert.deepStrictEqual(AD.migrateSave(oldSave).reward, { gold: 9, cards: [], charms: ['coin'], cardPick: null, charmPick: null });
+const newSave = { reward: { gold: 9, cards: [1], charms: [], cardPick: 0, charmPick: null } };
+assert.strictEqual(AD.migrateSave(newSave), newSave);
+
 console.log('logic 테스트 통과');
 
 if (process.argv.includes('--sim')) sim();

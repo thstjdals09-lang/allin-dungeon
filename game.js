@@ -45,7 +45,7 @@
   function loadSave() {
     try {
       const s = JSON.parse(localStorage.getItem(SAVE_KEY) || 'null');
-      return isState(s) && RESUMABLE.includes(s.screen) ? s : null;
+      return isState(s) && RESUMABLE.includes(s.screen) ? AD.migrateSave(s) : null;
     } catch (e) { return null; }
   }
 
@@ -53,6 +53,7 @@
   function newRun() {
     V.resetSeen(); // 카드 id 가 c0 부터 다시 쓰이므로 딜 연출 기록도 비운다
     ui.mapSel = null;
+    ui.restPick = null;
     S = {
       v: VERSION, screen: 'map', hp: START_STACK, maxHp: START_STACK, gold: 40, deck: [], charms: [],
       floor: 1, step: 0, node: null, map: AD.genFloorMap(rnd), path: [], removeCost: 50, nextId: 0,
@@ -793,7 +794,7 @@
 
   // 아티팩트 뷰어가 새 버전을 받아도 판이 이어지게. 형식이 다른 옛 상태는 버린다.
   window.claude?.hot?.snapshot?.(() => ({ S }));
-  const boot = (data) => { S = data && isState(data.S) ? data.S : null; render(); };
+  const boot = (data) => { S = data && isState(data.S) ? AD.migrateSave(data.S) : null; render(); };
   if (window.claude?.hot?.ready) window.claude.hot.ready(boot);
   else boot(window.claude?.hot?.data ?? {});
 })();

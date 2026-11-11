@@ -282,10 +282,17 @@
   // 지금 고를 수 있는 칸: 첫 줄은 전부, 그 뒤는 지나온 칸에서 이어진 칸
   const choicesAt = (map, path, step) => (step === 0 ? map.rows[0].map((_, i) => i) : map.edges[step - 1][path[step - 1]]);
 
+  // 이전 빌드의 보상(받는 즉시 덱에 들어감)을 새 방식(떠날 때 확정)으로: 이미 받은 쪽은 비워 두 번 받지 않게
+  function migrateSave(s) {
+    const r = s.reward;
+    if (!r || !('cardDone' in r)) return s;
+    return { ...s, reward: { gold: r.gold, cards: r.cardDone ? [] : r.cards, charms: r.charmDone ? [] : r.charms, cardPick: null, charmPick: null } };
+  }
+
   const api = {
     SUITS, rankLabel, HANDS, ROYAL_BONUS, ANTE, ALLIN_ADD, ENCHANTS, ENCHANT_IDS, CHARMS, ENEMIES, NODES, STEPS, FLOORS, TELLS,
     shuffle, pick, starterDeck, tableDeck, eval5, best, isRoyal, describe, strength, tellOf, enemyFolds,
-    foldDamage, resolveShowdown, pickEnemy, randomCard, randomCharms, genFloorMap, choicesAt,
+    foldDamage, resolveShowdown, pickEnemy, randomCard, randomCharms, genFloorMap, choicesAt, migrateSave,
   };
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
   else root.AD = api;
