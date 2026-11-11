@@ -112,6 +112,31 @@ assert.strictEqual(AD.enemyAct(foe, 0.9, 'raise', seq(0.5, 0.01)), 'call');
 assert.strictEqual(AD.enemyAct(foe, 0.1, 'allin', seq(0.5)), 'fold');
 assert.strictEqual(AD.pickEnemy(1, 'normal').bluff >= 0.1, true);
 
+// 보스·하이롤러 규칙
+{
+  const ruled = AD.ENEMIES.filter((e) => e.rule).map((e) => e.rule).sort();
+  assert.deepStrictEqual(ruled, Object.keys(AD.RULES).sort(), '규칙 6개가 각각 한 상대에게');
+  const bear = AD.ENEMIES.find((e) => e.rule === 'forceAllin');
+  assert.ok([3, 6, 9].every((n) => AD.isForcedAllin(bear, n)) && ![1, 2, 4].some((n) => AD.isForcedAllin(bear, n)));
+  assert.strictEqual(AD.ruleNotice(bear, 3), '이번 판 강제 올인');
+  assert.strictEqual(AD.ruleNotice(bear, 1), '2판 뒤 강제 올인');
+  assert.strictEqual(AD.ruleNotice(bear, 2), '1판 뒤 강제 올인');
+  assert.strictEqual(AD.ruleNotice({}, 1), '');
+  // 크루피어: 가장 쓸모없는 보드 카드를 후보 중 최고로 바꾼다
+  const eh = C('Ah Ad');
+  const bd = C('2c 7s 9d');
+  const cands = C('Kc As 3h');
+  const rig = AD.rigCard(eh, bd, cands);
+  assert.strictEqual(rig.card.r, 14, '에이스로 트리플');
+  assert.ok(AD.strength(eh, bd.map((c, k) => (k === rig.index ? rig.card : c))) > AD.strength(eh, bd));
+  assert.strictEqual(AD.rigCard(C('Ah Ad'), C('As Ac 9d'), C('2c 3d 4h')), null, '나빠지기만 하면 안 바꾼다');
+  // 하우스: 리버는 끝나기 전에만 숨김
+  const full = C('2c 7s 9d Jh Qs');
+  assert.strictEqual(AD.visibleBoard({ rule: 'hiddenCard' }, full, false).length, 4);
+  assert.strictEqual(AD.visibleBoard({ rule: 'hiddenCard' }, full, true).length, 5);
+  assert.strictEqual(AD.visibleBoard({}, full, false).length, 5);
+}
+
 console.log('logic 테스트 통과');
 
 if (process.argv.includes('--sim')) sim();

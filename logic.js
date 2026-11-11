@@ -58,21 +58,38 @@
     { id: 'bluffer', floor: 1, kind: 'normal', name: '허세꾼', glyph: '허', hp: 24, mul: 1, tight: 0.7, lie: 0.5, bluff: 0.35, desc: '텔 절반이 연기다.' },
     { id: 'coward', floor: 1, kind: 'normal', name: '겁 많은 회사원', glyph: '겁', hp: 20, mul: 1, tight: 1.5, lie: 0, desc: '벳이 들어오면 쉽게 폴드한다.' },
     { id: 'local', floor: 1, kind: 'normal', name: '동네 타짜', glyph: '타', hp: 26, mul: 1.2, tight: 0.9, lie: 0.25, desc: '이길 때 크게 가져간다.' },
-    { id: 'drifter', floor: 1, kind: 'elite', name: '떠돌이 딜러', glyph: '떠', hp: 44, mul: 1.3, tight: 0.8, lie: 0.3, armor: 1, desc: '테이블을 옮겨 다니며 팟을 쓸어 간다.' },
-    { id: 'bear', floor: 1, kind: 'boss', name: '문지기 곰', glyph: '곰', hp: 70, mul: 1.3, tight: 0.6, lie: 0.2, armor: 2, bluff: 0.15, desc: '1층 계단을 지키는 덩치.' },
+    { id: 'drifter', floor: 1, kind: 'elite', name: '떠돌이 딜러', glyph: '떠', hp: 44, mul: 1.3, tight: 0.8, lie: 0.3, armor: 1, rule: 'stealChange', desc: '테이블을 옮겨 다니며 팟을 쓸어 간다.' },
+    { id: 'bear', floor: 1, kind: 'boss', name: '문지기 곰', glyph: '곰', hp: 70, mul: 1.3, tight: 0.6, lie: 0.2, armor: 2, bluff: 0.15, rule: 'forceAllin', desc: '1층 계단을 지키는 덩치.' },
 
     { id: 'loanshark', floor: 2, kind: 'normal', name: '사채업자', glyph: '채', hp: 34, mul: 1.2, tight: 0.9, lie: 0.2, heal: 4, desc: '이길 때마다 스택을 채운다.' },
     { id: 'twins', floor: 2, kind: 'normal', name: '쌍둥이 딜러', glyph: '쌍', hp: 28, mul: 0.9, tight: 1, lie: 0.2, hole: 3, desc: '카드 3장을 받아 그중에서 핸드를 고른다.' },
     { id: 'iron', floor: 2, kind: 'normal', name: '무쇠손', glyph: '쇠', hp: 34, mul: 1.2, tight: 0.8, lie: 0.2, armor: 2, desc: '져도 칩을 덜 잃는다.' },
-    { id: 'magician', floor: 2, kind: 'elite', name: '카드 마술사', glyph: '마', hp: 48, mul: 1, tight: 0.8, lie: 0.6, hole: 3, bluff: 0.3, desc: '텔도 카드도 믿을 수 없다.' },
-    { id: 'croupier', floor: 2, kind: 'boss', name: '수석 크루피어', glyph: '딜', hp: 80, mul: 1.1, tight: 0.5, lie: 0.3, hole: 3, armor: 1, bluff: 0.15, desc: '2층의 모든 테이블을 돌리는 사람.' },
+    { id: 'magician', floor: 2, kind: 'elite', name: '카드 마술사', glyph: '마', hp: 48, mul: 1, tight: 0.8, lie: 0.6, hole: 3, bluff: 0.3, rule: 'swapRandom', desc: '텔도 카드도 믿을 수 없다.' },
+    { id: 'croupier', floor: 2, kind: 'boss', name: '수석 크루피어', glyph: '딜', hp: 80, mul: 1.1, tight: 0.5, lie: 0.3, hole: 3, armor: 1, bluff: 0.15, rule: 'rigBoard', desc: '2층의 모든 테이블을 돌리는 사람.' },
 
     { id: 'gambler', floor: 3, kind: 'normal', name: '빚더미 노름꾼', glyph: '빚', hp: 42, mul: 1.4, tight: 0.5, lie: 0.3, bluff: 0.25, desc: '잃을 게 없어서 폴드를 잘 안 한다.' },
     { id: 'ghost', floor: 3, kind: 'normal', name: '유령 손님', glyph: '령', hp: 40, mul: 1.4, tight: 0.9, poker: true, desc: '얼굴이 없어 텔도 없다.' },
     { id: 'banker', floor: 3, kind: 'normal', name: '금고지기', glyph: '금', hp: 44, mul: 1.3, tight: 0.9, lie: 0.2, armor: 3, desc: '져도 칩을 많이 덜 잃는다.' },
-    { id: 'shark', floor: 3, kind: 'elite', name: '큰손', glyph: '큰', hp: 58, mul: 1.2, tight: 0.6, lie: 0.3, hole: 3, armor: 1, desc: '큰 팟을 좋아한다.' },
-    { id: 'house', floor: 3, kind: 'boss', name: '하우스의 주인', glyph: '주', hp: 110, mul: 1.3, tight: 0, poker: true, hole: 3, armor: 2, bluff: 0.15, desc: '폴드하지 않는다. 텔도 없다.' },
+    { id: 'shark', floor: 3, kind: 'elite', name: '큰손', glyph: '큰', hp: 58, mul: 1.2, tight: 0.6, lie: 0.3, hole: 3, armor: 1, rule: 'bigPot', desc: '큰 팟을 좋아한다.' },
+    { id: 'house', floor: 3, kind: 'boss', name: '하우스의 주인', glyph: '주', hp: 110, mul: 1.3, tight: 0, poker: true, hole: 3, armor: 2, bluff: 0.15, rule: 'hiddenCard', desc: '폴드하지 않는다. 텔도 없다.' },
   ];
+
+  // 보스·하이롤러 고유 규칙. notice 는 판이 시작될 때 상대 패널에 뜨는 예고
+  const RULES = {
+    forceAllin: { name: '강제 올인', desc: '3판마다 플롭에서 올인한다. 폴드 아니면 콜뿐', notice: '' },
+    rigBoard: { name: '보드 바꿔치기', desc: '내가 핸드를 정하면 보드 1장을 제 패에 유리하게 바꾼다', notice: '핸드를 정하면 보드 1장을 바꿔친다' },
+    hiddenCard: { name: '엎어 둔 리버', desc: '리버 카드가 쇼다운까지 엎어져 있다', notice: '리버는 쇼다운까지 엎어져 있다' },
+    stealChange: { name: '체인지 강탈', desc: '판마다 내 체인지가 1개 줄어든다', notice: '체인지 1개를 빼앗는다' },
+    swapRandom: { name: '보드 변조', desc: '내가 핸드를 정하면 보드 1장이 무작위로 바뀐다', notice: '핸드를 정하면 보드 1장이 바뀐다' },
+    bigPot: { name: '큰 팟', desc: '팟이 ×2 에서 시작한다', notice: '팟 ×2 로 시작' },
+  };
+  const FORCE_EVERY = 3;
+  const isForcedAllin = (enemy, handNo) => enemy.rule === 'forceAllin' && handNo % FORCE_EVERY === 0;
+  function ruleNotice(enemy, handNo) {
+    if (!enemy.rule) return '';
+    if (enemy.rule !== 'forceAllin') return RULES[enemy.rule].notice;
+    return isForcedAllin(enemy, handNo) ? '이번 판 강제 올인' : `${FORCE_EVERY - (handNo % FORCE_EVERY)}판 뒤 강제 올인`;
+  }
 
   const NODES = {
     fight: { name: '테이블', desc: '일반 상대와 헤즈업' },
@@ -211,6 +228,20 @@
     return 'call';
   }
 
+  // 크루피어: 보드 한 자리를 후보 카드로 바꿔 상대 패 세기를 가장 높이는 {index, card}. 어떻게 해도 나빠지기만 하면 null
+  function rigCard(ehole, board, candidates) {
+    let top = null;
+    let topV = strength(ehole, board);
+    board.forEach((_, i) => candidates.forEach((card) => {
+      const v = strength(ehole, board.map((c, k) => (k === i ? card : c)));
+      if (v > topV) { topV = v; top = { index: i, card }; }
+    }));
+    return top;
+  }
+
+  // 하우스: 리버(다섯 번째 보드 카드)는 쇼다운 전까지 내게 안 보인다
+  const visibleBoard = (enemy, board, ended) => (enemy.rule === 'hiddenCard' && !ended ? board.slice(0, 4) : board);
+
   const foldDamage = (pot) => ANTE * pot;
 
   // 쇼다운: 진 쪽이 (족보 값 + 보너스) × 팟 만큼 칩을 잃는다. 방어는 마지막에 뺀다.
@@ -300,9 +331,9 @@
   }
 
   const api = {
-    SUITS, rankLabel, HANDS, ROYAL_BONUS, ANTE, ALLIN_ADD, ENCHANTS, ENCHANT_IDS, CHARMS, ENEMIES, NODES, STEPS, FLOORS, TELLS,
+    SUITS, rankLabel, HANDS, ROYAL_BONUS, ANTE, ALLIN_ADD, ENCHANTS, ENCHANT_IDS, CHARMS, ENEMIES, NODES, STEPS, FLOORS, TELLS, RULES,
     shuffle, pick, starterDeck, tableDeck, eval5, best, isRoyal, describe, strength, tellOf, enemyFolds, enemyAct,
-    foldDamage, resolveShowdown, pickEnemy, randomCard, randomCharms, genFloorMap, choicesAt, migrateSave,
+    isForcedAllin, ruleNotice, rigCard, visibleBoard, foldDamage, resolveShowdown, pickEnemy, randomCard, randomCharms, genFloorMap, choicesAt, migrateSave,
   };
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
   else root.AD = api;

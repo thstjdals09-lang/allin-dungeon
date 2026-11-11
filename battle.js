@@ -42,6 +42,9 @@ window.BATTLE = function (C) {
     b.tell = AD.tellOf(b.enemy, b.str, rnd);
   }
 
+  // 이름 뒤 조사: 받침이 있으면 이, 없으면 가
+  const iga = (name) => `${name}${(name.charCodeAt(name.length - 1) - 0xac00) % 28 ? '이' : '가'}`;
+
   function log(msg) { C.S.battle.log = [msg, ...C.S.battle.log].slice(0, 6); }
 
   // 황금 강화는 내가 폴드하지 않은 판에서만 — 핸드만 정하고 폴드해서 상금을 모으는 길을 막는다
@@ -63,15 +66,16 @@ window.BATTLE = function (C) {
     b.shown = b.ehole.map(() => false);
     b.sel = [];
     b.hole = [];
-    b.pot = 1;
+    b.pot = b.enemy.rule === 'bigPot' ? 2 : 1;
     b.street = 0;
-    b.changes = CHANGES + (has('coin') ? 1 : 0);
+    b.changes = Math.max(0, CHANGES + (has('coin') ? 1 : 0) - (b.enemy.rule === 'stealChange' ? 1 : 0));
     b.result = null;
     b.facing = null;
     b.phase = 'pick';
     ui.swap = false;
     readEnemy(b);
     if (has('mirror')) reveal(b);
+    if (b.enemy.rule === 'stealChange') log(`${iga(b.enemy.name)} 체인지 1개를 빼앗았다`);
   }
 
   function endHand(b, result, msg) {
@@ -96,6 +100,7 @@ window.BATTLE = function (C) {
   function enemyRaised(b, kind, before, text) {
     b.pot++;
     b.facing = { kind, before };
+    ui.swap = false;
     fx({ t: 'ebet' });
     log(text);
   }
@@ -120,11 +125,39 @@ window.BATTLE = function (C) {
     log(`${where} → 상대 콜 · 팟 ×${b.pot}`);
     if (!allin) return nextStreet(b);
     fx({ t: 'cutin', text: '올인 콜' });
-    const need = 5 - b.board.length; // 올인이면 남은 카드를 다 깔고 바로 쇼다운
+    runOut(b);
+  }
+
+  // 올인이면 남은 카드를 다 깔고 바로 쇼다운
+  function runOut(b) {
+    const need = 5 - b.board.length;
     b.board = [...b.board, ...b.table.slice(0, need)];
     b.table = b.table.slice(need);
     b.street = 2;
     showdown(b);
+  }
+
+  // 핸드를 정한 직후의 보드 규칙(크루피어·마술사)과 곰의 강제 올인. 새 카드는 새 id 라 기존 딜 연출이 재생된다.
+  function applyLockRules(b) {
+    const e = b.enemy;
+    const put = (index, card) => {
+      b.board = b.board.map((c, k) => (k === index ? card : c));
+      b.table = b.table.filter((c) => c.id !== card.id);
+      readEnemy(b);
+    };
+    if (e.rule === 'rigBoard') {
+      const rig = AD.rigCard(b.ehole, b.board, b.table.slice(0, 3));
+      if (rig) { put(rig.index, rig.card); log(`${iga(e.name)} 보드 1장을 바꿔쳤다`); }
+    } else if (e.rule === 'swapRandom') {
+      put(AD.pick(b.board.map((_, i) => i), rnd), b.table[0]);
+      log(`${iga(e.name)} 보드 1장을 바꿨다`);
+    } else if (AD.isForcedAllin(e, b.handNo)) {
+      const before = b.pot;
+      b.pot += AD.ALLIN_ADD;
+      b.facing = { kind: 'allin', before };
+      fx({ t: 'ebet' });
+      log(`플롭 ${e.name} 강제 올인 · 팟 ×${b.pot}`);
+    }
   }
 
   function showdown(b) {
@@ -181,6 +214,7 @@ window.BATTLE = function (C) {
         ? '<p class="tell"><span class="lbl">텔</span><b>없음</b> 속을 알 수 없다</p>'
         : `<p class="tell t${b.tell}"><span class="lbl">텔</span><b>${AD.TELLS[b.tell].mood}</b> ${AD.TELLS[b.tell].text}</p>`;
     }
+    const notice = e.rule && b.phase !== 'end' ? `<p class="rule">예고 · ${AD.ruleNotice(e, b.handNo)}</p>` : '';
     const ecards = b.ehole.map((c, i) => (b.shown[i] ? cardHTML(c, { used: b.result && b.result.eused && b.result.eused.includes(c.id) }) : backHTML())).join('');
     return `<section class="enemy ${e.kind}">
       <button class="medal" data-act="modal" data-arg="enemy" aria-label="${e.name} 특성 보기">${e.glyph}</button>
@@ -191,7 +225,7 @@ window.BATTLE = function (C) {
         <p class="edesc">${e.desc}</p>
       </div>
       <div class="ehole" aria-label="상대 핸드">${ecards}</div>
-      ${tell}
+      ${tell}${notice}
     </section>`;
   }
 
@@ -215,8 +249,8 @@ window.BATTLE = function (C) {
       const foldCost = has('shoes') ? 0 : AD.foldDamage(f ? f.before : b.pot);
       const allinAdd = AD.ALLIN_ADD + (has('ring') ? 1 : 0);
       const foldChip = `<button class="chip fold" data-act="fold" aria-label="폴드 스택 −${foldCost}"><b>폴드</b><span>스택 −${foldCost}</span></button>`;
-      const callChip = `<button class="chip c1" data-act="call" aria-label="콜 팟 ×${b.pot}, ${STREETS[b.street] === '리버' ? '쇼다운' : '다음 카드'}"><b>콜</b><span>팟 ×${b.pot}</span></button>`;
-      if (f && f.kind === 'raise') return `<div class="chips">${foldChip}${callChip}</div>`;
+      const callChip = `<button class="chip c1" data-act="call" aria-label="콜 팟 ×${b.pot}, ${f && f.kind === 'allin' ? '남은 카드를 깔고 쇼다운' : STREETS[b.street] === '리버' ? '쇼다운' : '다음 카드'}"><b>콜</b><span>팟 ×${b.pot}</span></button>`;
+      if (f && f.kind !== 'bet') return `<div class="chips">${foldChip}${callChip}</div>`;
       if (f) {
         return `<div class="chips">${foldChip}${callChip}
         <button class="chip c2" data-act="reraise" aria-label="레이즈 팟 ×${b.pot + 1}"><b>레이즈</b><span>팟 ×${b.pot + 1}</span></button>
@@ -252,8 +286,9 @@ window.BATTLE = function (C) {
   function vBattle() {
     const b = C.S.battle;
     const used = b.result && b.result.used ? b.result.used : [];
+    const hideRiver = b.enemy.rule === 'hiddenCard' && b.phase !== 'end';
     const board = [
-      ...b.board.map((c, i) => cardHTML(c, ui.swap ? { act: 'swap', arg: i, swap: true } : { used: used.includes(c.id) })),
+      ...b.board.map((c, i) => (hideRiver && i === 4 ? backHTML() : cardHTML(c, ui.swap ? { act: 'swap', arg: i, swap: true } : { used: used.includes(c.id) }))),
       ...Array(5 - b.board.length).fill(slotHTML()),
     ].join('');
     // 손패는 높은 숫자부터, 손에 쥔 것처럼 살짝 부채꼴로
@@ -266,9 +301,9 @@ window.BATTLE = function (C) {
       : cardHTML(c, { sel: inHole(c), dim: !inHole(c), used: used.includes(c.id), style: fan(i) }))).join('');
 
     const holeNow = b.phase === 'pick' ? b.hand.filter((c) => b.sel.includes(c.id)) : b.hole;
-    const pres = holeNow.length === 2 && b.phase !== 'end' ? AD.best([...holeNow, ...b.board]) : null;
+    const pres = holeNow.length === 2 && b.phase !== 'end' ? AD.best([...holeNow, ...AD.visibleBoard(b.enemy, b.board, false)]) : null;
     const pips = Array.from({ length: CHANGES + (has('coin') ? 1 : 0) }, (_, i) => `<i class="${i < b.changes ? 'on' : ''}"></i>`).join('');
-    const swapBtn = b.phase === 'bet'
+    const swapBtn = b.phase === 'bet' && !b.facing
       ? btn(ui.swap ? '취소' : `보드 체인지 · ${swapCost()}`, 'swapmode', undefined, 'ghost sm', !ui.swap && b.changes < swapCost())
       : '';
     const status = `<div class="status">
@@ -282,7 +317,7 @@ window.BATTLE = function (C) {
     let hint = '';
     if (b.phase === 'pick') hint = '핸드 2장을 고르세요. 고른 카드는 체인지로 바꿀 수 있습니다.';
     else if (b.phase === 'bet') {
-      hint = b.facing ? (b.facing.kind === 'bet' ? '콜하면 다음 카드, 레이즈하면 되받아칩니다.' : '콜하거나 폴드하세요. 이 거리 레이즈는 끝났습니다.')
+      hint = b.facing ? (b.facing.kind === 'allin' ? '폴드하거나 콜해서 남은 카드를 깔고 쇼다운하세요.' : b.facing.kind === 'bet' ? '콜하면 다음 카드, 레이즈하면 되받아칩니다.' : '콜하거나 폴드하세요. 이 거리 레이즈는 끝났습니다.')
         : ui.swap ? '바꿀 보드 카드를 누르세요.'
         : b.street === 2 ? '리버 베팅. 끝나면 쇼다운입니다.' : `${STREETS[b.street]} 베팅. 체크하면 ${['턴이', '리버가'][b.street]} 열립니다.`;
     }
@@ -290,7 +325,7 @@ window.BATTLE = function (C) {
     return `<main class="screen battle">
       ${enemyPanel(b)}
       <section class="board${ui.swap ? ' swapping' : ''}" aria-label="보드">
-        ${b.facing && b.phase === 'bet' ? `<p class="facing" role="status">상대 ${b.facing.kind === 'bet' ? '벳' : '레이즈'} · 팟 ×${b.pot}</p>` : ''}
+        ${b.facing && b.phase === 'bet' ? `<p class="facing" role="status">상대 ${{ bet: '벳', raise: '레이즈', allin: '올인' }[b.facing.kind]} · 팟 ×${b.pot}</p>` : ''}
         <div class="potline">${stepper(b)}<b class="num pot">팟 ×${b.pot}</b></div>
         <div class="cards">${board}</div>
       </section>
@@ -330,6 +365,7 @@ window.BATTLE = function (C) {
       b.hole.filter((c) => c.en === 'eye').forEach(() => reveal(b));
       b.phase = 'bet';
       fx({ t: 'lock' });
+      applyLockRules(b);
     },
     check() {
       const b = C.S.battle;
@@ -340,7 +376,10 @@ window.BATTLE = function (C) {
       log(`${STREETS[b.street]} 체크`);
       nextStreet(b);
     },
-    call() { const b = C.S.battle; log(`${STREETS[b.street]} 상대 ${b.facing.kind === 'bet' ? '벳' : '레이즈'} → 콜 · 팟 ×${b.pot}`); fx({ t: 'check' }); nextStreet(b); },
+    call() {
+      const b = C.S.battle;
+      if (b.facing.kind === 'allin') { log(`플롭 강제 올인 → 콜 · 팟 ×${b.pot}`); fx({ t: 'cutin', text: '올인 콜' }); return runOut(b); }
+      log(`${STREETS[b.street]} 상대 ${b.facing.kind === 'bet' ? '벳' : '레이즈'} → 콜 · 팟 ×${b.pot}`); fx({ t: 'check' }); nextStreet(b); },
     bet() { raise(C.S.battle, 1, false); },
     reraise() { raise(C.S.battle, 1, false, '레이즈', false); },
     allin() { raise(C.S.battle, AD.ALLIN_ADD + (has('ring') ? 1 : 0), true); },
@@ -357,7 +396,7 @@ window.BATTLE = function (C) {
     },
     swap(i) {
       const b = C.S.battle;
-      if (!ui.swap || b.phase !== 'bet' || b.changes < swapCost()) return;
+      if (!ui.swap || b.phase !== 'bet' || b.facing || b.changes < swapCost()) return;
       b.board = b.board.map((c, k) => (k === +i ? b.table[0] : c));
       b.table = b.table.slice(1);
       b.changes -= swapCost();

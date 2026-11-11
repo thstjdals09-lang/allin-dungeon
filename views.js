@@ -167,6 +167,7 @@
       e.mul !== 1 && [`족보 값 ×${e.mul}`, `이 상대가 이기면 내가 잃는 칩이 ${e.mul}배`],
       e.armor && [`방어 ${e.armor}`, `내가 이겨도 상대는 ${e.armor} 덜 잃는다`],
       e.heal && [`회복 ${e.heal}`, `이길 때마다 스택을 ${e.heal} 채운다`],
+      e.rule && [AD.RULES[e.rule].name, AD.RULES[e.rule].desc],
       e.hole === 3 && ['카드 3장', '카드 3장을 받아 그중 좋은 쪽을 쓴다'],
     ].filter(Boolean);
     return `<div class="who-sheet"><span class="medal" aria-hidden="true">${e.glyph}</span><div><h2 class="h">${e.name}</h2><p class="note">${e.desc}</p></div></div>
