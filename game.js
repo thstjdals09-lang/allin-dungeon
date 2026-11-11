@@ -469,7 +469,7 @@
       <div class="stat gold"><span class="lbl">상금</span><b class="num">${S.gold}</b></div>
       <div class="stat"><span class="lbl">층</span><b class="num">${S.floor}<small>/${AD.FLOORS}</small></b></div>
       <div class="tools">${btn(`덱 ${S.deck.length}`, 'modal', 'deck', 'ghost sm')}${btn('메뉴', 'modal', 'menu', 'ghost sm')}</div>
-      ${S.charms.length ? `<button class="charms" data-act="modal" data-arg="charms" aria-label="유물 ${S.charms.length}개 보기">${S.charms.map((id) => `<span class="charm">${AD.CHARMS[id].name}</span>`).join('')}</button>` : ''}
+      ${S.charms.length ? `<button class="charms" data-act="modal" data-arg="charms" aria-label="유물 ${S.charms.length}개: ${S.charms.map((id) => AD.CHARMS[id].name).join(', ')}">${S.charms.map((id) => `<span class="charm">${AD.CHARMS[id].name}</span>`).join('')}</button>` : ''}
     </header>`;
   }
 
@@ -559,10 +559,10 @@
       const allinAdd = AD.ALLIN_ADD + (has('ring') ? 1 : 0);
       // 칩 아래 숫자는 누른 뒤의 팟 — 무엇이 바뀌는지 미리 보이게
       return `<div class="chips">
-        <button class="chip fold" data-act="fold" aria-label="폴드, 스택 ${foldCost} 잃음"><b>폴드</b><span>스택 −${foldCost}</span></button>
-        <button class="chip c1" data-act="check" aria-label="체크, 팟 ${b.pot}배 그대로"><b>체크</b><span>팟 ×${b.pot}</span></button>
-        <button class="chip c2" data-act="bet" aria-label="벳, 팟 ${b.pot + 1}배"><b>벳</b><span>팟 ×${b.pot + 1}</span></button>
-        <button class="chip c3" data-act="allin" aria-label="올인, 팟 ${b.pot + allinAdd}배, 바로 쇼다운"><b>올인</b><span>팟 ×${b.pot + allinAdd}</span></button>
+        <button class="chip fold" data-act="fold" aria-label="폴드 스택 −${foldCost}"><b>폴드</b><span>스택 −${foldCost}</span></button>
+        <button class="chip c1" data-act="check" aria-label="체크 팟 ×${b.pot}"><b>체크</b><span>팟 ×${b.pot}</span></button>
+        <button class="chip c2" data-act="bet" aria-label="벳 팟 ×${b.pot + 1}"><b>벳</b><span>팟 ×${b.pot + 1}</span></button>
+        <button class="chip c3" data-act="allin" aria-label="올인 팟 ×${b.pot + allinAdd}, 바로 쇼다운"><b>올인</b><span>팟 ×${b.pot + allinAdd}</span></button>
       </div>`;
     }
     const label = S.hp <= 0 ? '결과 보기' : b.enemy.hp <= 0 ? '보상 받기' : '다음 판';
@@ -635,8 +635,11 @@
     </main>`;
   }
 
-  // 덱빌딩 판단용: 이 카드를 넣으면 같은 숫자가 몇 장이 되는지
-  const sameRank = (c) => `<small class="same">덱에 ${AD.rankLabel(c.r)} ${S.deck.filter((d) => d.r === c.r).length}장</small>`;
+  // 덱빌딩 판단용: 아직 안 받은 카드는 넣으면 같은 숫자가 몇 장이 되는지, 받은 카드는 지금 몇 장인지
+  function sameRank(c, taken) {
+    const n = S.deck.filter((d) => d.r === c.r).length;
+    return `<small class="same">${taken ? `덱에 ${AD.rankLabel(c.r)} ${n}장` : `넣으면 ${AD.rankLabel(c.r)} ${n + 1}장`}</small>`;
+  }
 
   function charmCard(id, act, extra = '', disabled = false) {
     const c = AD.CHARMS[id];
@@ -648,7 +651,7 @@
     const cards = r.cards.map((c, i) => `<div class="offer${r.took === c.id ? ' taken' : ''}">
         ${cardHTML(c, r.cardDone ? {} : { act: 'takeCard', arg: i })}
         <small>${c.en ? AD.ENCHANTS[c.en].desc : '강화 없음'}</small>
-        ${sameRank(c)}
+        ${sameRank(c, r.took === c.id)}
       </div>`).join('');
     const charms = r.charms.length
       ? `<h3 class="sub">유물 1개</h3><div class="charmrow">${r.charms.map((id) => charmCard(id, 'takeCharm', r.tookCharm === id ? '<em>획득</em>' : '', r.charmDone)).join('')}</div>`
@@ -669,7 +672,7 @@
     const cards = sh.cards.map((x, i) => `<div class="offer${x.sold ? ' taken' : ''}">
         ${cardHTML(x.card, x.sold ? {} : { act: 'buyCard', arg: i })}
         <small>${x.card.en ? AD.ENCHANTS[x.card.en].desc : '강화 없음'}</small>
-        ${sameRank(x.card)}
+        ${sameRank(x.card, x.sold)}
         <b class="price num">${x.sold ? '구매함' : `${x.price}`}</b>
       </div>`).join('');
     const charms = sh.charms.map((x, i) => `<button class="charmcard" data-act="buyCharm" data-arg="${i}"${x.sold ? ' disabled' : ''}>
@@ -751,7 +754,7 @@
     const log = S.battle && S.battle.log.length
       ? `<h3 class="sub">이번 매치 기록</h3><ol class="log">${S.battle.log.map((l) => `<li>${l}</li>`).join('')}</ol>` : '';
     const quit = m.confirm
-      ? `<p class="note warn">지금 포기하면 이번 도전의 진행이 사라집니다.</p>
+      ? `<p class="note warn" role="alert">지금 포기하면 이번 도전의 진행이 사라집니다.</p>
          <div class="row">${btn('포기하고 처음으로', 'quit', undefined, 'danger')}${btn('계속하기', 'modal', 'menu', 'ghost')}</div>`
       : btn('처음 화면으로', 'quitAsk', undefined, 'ghost wide');
     return `<h2 class="h">메뉴</h2>
@@ -804,11 +807,11 @@
 
   function vModal() {
     const m = ui.modal;
-    if (!m) return '';
+    if (!m || !S) return '';
     let body = '';
     if (m.type === 'menu') body = menuSheet(m);
     else if (m.type === 'charms') body = charmsSheet();
-    else if (m.type === 'enemy' && S.battle) body = enemySheet();
+    else if (m.type === 'enemy') { if (!S.battle) return ''; body = enemySheet(); }
     else if (m.type === 'rules') {
       body = `<h2 class="h">규칙</h2>
         <p class="note">한 판: 플롭 → 핸드 2장 선택 → 플롭 베팅 → 턴 → 턴 베팅 → 리버 → 리버 베팅 → 쇼다운. 진 쪽이 족보 값 × 팟만큼 스택을 잃고, 상대가 폴드하면 상대가 ${AD.ANTE} × 팟을 잃습니다.</p>
@@ -821,16 +824,32 @@
         <dl class="gloss">${GLOSSARY.map(([t, d]) => `<div><dt>${t}</dt><dd>${d}</dd></div>`).join('')}</dl>
         <h3 class="sub">카드 강화 · 핸드로 쓸 때만 효과</h3>
         <ul class="enlist">${AD.ENCHANT_IDS.map((k) => `<li><span class="seal seal-${k} inline">${AD.ENCHANTS[k].seal}</span><b>${AD.ENCHANTS[k].name}</b> ${AD.ENCHANTS[k].desc}</li>`).join('')}</ul>`;
-    } else body = deckSheet(m);
-    return `<div class="modal" role="dialog" aria-modal="true"><div class="sheet">${body}<div class="row">${btn('닫기', 'close', undefined, 'ghost wide')}</div></div></div>`;
+    } else if (m.type === 'deck') body = deckSheet(m);
+    else return '';
+    return `<div class="modal" role="dialog" aria-modal="true" aria-labelledby="sheet-title"><div class="sheet">${body.replace('<h2 class="h">', '<h2 class="h" id="sheet-title">')}<div class="row">${btn('닫기', 'close', undefined, 'ghost wide')}</div></div></div>`;
+  }
+
+  // 다시 그려도 키보드 포커스가 제자리에 있게: 누른 버튼을 기억했다가 같은 버튼으로 돌려놓는다
+  function focusKey() {
+    const el = document.activeElement;
+    if (!el || !app.contains(el) || !el.dataset.act) return null;
+    const arg = el.dataset.arg !== undefined ? `[data-arg="${CSS.escape(el.dataset.arg)}"]` : '';
+    return `[data-act="${CSS.escape(el.dataset.act)}"]${arg}`;
   }
 
   function render() {
-    const view = !S ? vTitle() : { map: vMap, battle: vBattle, reward: vReward, shop: vShop, rest: vRest, event: vEvent, over: vEnd, win: vEnd }[S.screen]();
-    const top = S && S.screen !== 'over' && S.screen !== 'win' ? topbar() : '';
-    app.innerHTML = top + view + vModal() + (ui.toast ? `<div class="toast" role="status">${ui.toast}</div>` : '');
     const screen = S ? S.screen : 'title';
     const changed = screen !== ui.screen;
+    if (changed) ui.modal = null; // 화면이 바뀌면 열려 있던 시트는 닫는다
+    const keep = focusKey();
+    const hadModal = !!app.querySelector('.modal');
+    const view = !S ? vTitle() : { map: vMap, battle: vBattle, reward: vReward, shop: vShop, rest: vRest, event: vEvent, over: vEnd, win: vEnd }[S.screen]();
+    const top = S && S.screen !== 'over' && S.screen !== 'win' ? topbar() : '';
+    const sheet = vModal();
+    // 시트가 열린 동안 뒤 화면은 inert — 마우스도 Tab 도 닿지 않는다
+    app.innerHTML = `<div class="under"${sheet ? ' inert' : ''}>${top}${view}</div>${sheet}${ui.toast ? `<div class="toast" role="status">${ui.toast}</div>` : ''}`;
+    const target = sheet && !hadModal ? app.querySelector('.sheet button') : keep && app.querySelector(keep);
+    if (target) target.focus({ preventScroll: true });
     ui.screen = screen;
     try {
       if (window.FX) FX.run(ui.fx, { changed, screen, from: ui.from });
