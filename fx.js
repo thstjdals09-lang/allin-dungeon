@@ -114,6 +114,7 @@
   const clean = (els) => () => els.forEach((el) => { el.style.transform = ''; el.style.opacity = ''; });
 
   // 선언·K.O. 같은 큰 연출 요소. 다음 렌더(run)가 시작되면 남은 것을 모두 치운다.
+  let settleNow = null;
   const live = new Set();
   const clearLive = () => { live.forEach((el) => el.remove()); live.clear(); };
 
@@ -194,11 +195,14 @@
   const esc = (t) => String(t).replace(/[&<>]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' }[c]));
 
   // 글자 요소를 만들어 붙이고 돌려준다. 동작 줄이기·anime 없음이면 정지한 채 보이고 같은 시간 뒤 사라진다(CSS 만).
-  function stage(cls, word, sub, ms) {
+  function stage(cls, word, sub, ms, hand = '') {
     // 단어마다 줄바꿈 단위로 묶고, 가장 긴 단어 글자 수(--n)로 글자 크기를 정해 360px 에 들어가게 한다
     const words = word.split(' ');
     const letters = words.map((w) => `<span class="wd">${[...w].map((ch) => `<i class="l">${esc(ch)}</i>`).join('')}</span>`).join('');
-    const el = overlay(`decl ${cls}`, `<b class="dw" aria-label="${esc(word)}" style="--n:${Math.max(...words.map((w) => w.length))}">${letters}</b>${sub ? `<span class="ds">${esc(sub)}</span>` : ''}`);
+    const el = overlay(`decl ${cls}`, `<b class="dw" aria-hidden="true" style="--n:${Math.max(...words.map((w) => w.length))}">${letters}</b>${hand ? `<span class="dh">${esc(hand)}</span>` : ''}${sub ? `<span class="ds">${esc(sub)}</span>` : ''}`);
+    el.setAttribute('role', 'status');
+    el.setAttribute('aria-live', 'polite');
+    el.setAttribute('aria-label', [word, hand, sub].filter(Boolean).join(' · '));
     live.add(el);
     later(ms, () => { el.remove(); live.delete(el); });
     return el;
@@ -208,21 +212,20 @@
   function playDecl(el, ms) {
     if (!on()) return;
     const ls = $$('.l', el);
-    const sub = $('.ds', el);
     el.style.opacity = '0';
     A.createTimeline({ onComplete: () => { el.remove(); live.delete(el); } })
       .add(el, { opacity: [0, 1], duration: 120, ease: 'linear' }, 0)
       .add(ls, { y: [-90, 0], scale: [2.2, 1], opacity: [0, 1], duration: 380, delay: A.stagger(45), ease: 'outBack(1.4)' }, 0)
-      .add(sub, { opacity: [0, 1], y: [10, 0], duration: 260, ease: EASE }, 300)
+      .add($$('.dh, .ds', el), { opacity: [0, 1], y: [10, 0], duration: 260, delay: A.stagger(80), ease: EASE }, 300)
       .add(el, { opacity: 0, y: 70, scale: 0.55, duration: 300, ease: 'inQuad' }, ms - 300);
   }
 
   // 판 하나가 끝났을 때의 선언. 끝나는 시각을 돌려준다.
-  function declare(kind, sub, at) {
+  function declare(kind, sub, at, hand = '') {
     later(at, () => {
       const d = DECL[kind];
-      sound(d.sound);
-      const el = stage(`h-${kind}`, d.word, sub, DECL_MS);
+      sound(hand ? 'big' : d.sound);
+      const el = stage(`h-${kind}`, d.word, sub, DECL_MS, hand);
       playDecl(el, DECL_MS);
       if (kind === 'win' || kind === 'theyfold') burst($('.dw', el), 18);
       if (kind === 'lose') shake($('main'), 9);
@@ -404,7 +407,8 @@
       });
       const verdict = ev.winner > 0 ? `상대 −${ev.toEnemy}` : ev.winner < 0 ? `스택 −${ev.toPlayer}` : '';
       const sub = [`${ev.pdesc} vs ${ev.edesc}`, verdict].filter(Boolean).join(' · ');
-      t = declare(ev.winner > 0 ? 'win' : ev.winner < 0 ? 'lose' : 'split', sub, t + 150);
+      const hand = ev.winner > 0 && ev.cat >= 4 ? ev.name : '';
+      t = declare(ev.winner > 0 ? 'win' : ev.winner < 0 ? 'lose' : 'split', sub, t + 150, hand);
       return finishHand(ev, t, ev);
     },
     efold(ev, at) {
@@ -423,12 +427,23 @@
 
   // 선언이 줄어드는 동안 결과 줄이 나타나고, 끝나면 데미지 → (K.O./BUSTED) → 버튼 순서
   function finishHand(ev, t, hit) {
-    appear($('.result'), t - 250);
-    later(t, () => hitOutcome(hit));
-    barDelay = t;
-    const end = ending(ev, t + 450);
-    const done = end === t + 450 ? t + 450 : end + 100;
+    const result = $('.result');
+    const finale = ev.kill || ev.bust;
+    const hitAt = finale ? t - 300 : t; // K.O./BUSTED 는 선언이 흐려지는 동안 바로 이어진다
+    let hitDone = false;
+    const doHit = () => { if (!hitDone) { hitDone = true; hitOutcome(hit); } };
+    appear(result, t - 250);
+    later(hitAt, doHit);
+    barDelay = hitAt;
+    const done = (finale ? ending(ev, hitAt) + 100 : t + 450);
     holdActions(done);
+    // 탭하면 남은 연출을 건너뛰고 결과 줄과 버튼을 바로 보인다
+    settleNow = () => {
+      if (result) result.style.opacity = '';
+      doHit();
+      const act = $('.battle .actions');
+      if (act) act.classList.remove('wait');
+    };
     return done;
   }
 
@@ -452,6 +467,7 @@
 
   function run(events, opt) {
     gen++;
+    settleNow = null;
     clearLive();
     barDelay = 0;
     if (opt.changed) bars.clear(); // 다른 화면·다른 상대의 막대 값에서 이어지지 않게
@@ -462,6 +478,23 @@
     events.forEach((ev) => { if (HANDLERS[ev.t]) at = HANDLERS[ev.t](ev, at, opt); });
     animateBars(barDelay);
   }
+
+  // 선언·K.O. 가 떠 있는 동안 탭·키 입력은 연출 건너뛰기로만 쓰이고, 아래 버튼은 누르지 않는다
+  let blockUntil = 0;
+  const swallow = (e) => { e.preventDefault(); e.stopPropagation(); };
+  ['pointerdown', 'keydown'].forEach((type) => document.addEventListener(type, (e) => {
+    if (!live.size) return;
+    swallow(e);
+    blockUntil = Date.now() + 450;
+    gen++; // 예약된 나머지 연출(K.O. 등)은 취소
+    clearLive();
+    const fn = settleNow;
+    settleNow = null;
+    if (fn) fn();
+  }, true));
+  ['pointerup', 'mouseup', 'click', 'keyup'].forEach((type) => document.addEventListener(type, (e) => {
+    if (Date.now() < blockUntil) swallow(e);
+  }, true));
 
   window.FX = {
     run,

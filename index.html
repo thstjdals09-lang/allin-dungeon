@@ -509,6 +509,7 @@
   .decl .l { display: inline-block; font-style: normal; }
   .decl .wd { display: flex; }
   .decl .ds { max-width: 92vw; padding: 5px 12px; border-radius: 6px; background: #12080dcc; color: var(--ivory); font-size: 15px; line-height: 1.35; }
+  .decl .dh { font-family: var(--f-display); font-weight: 800; font-size: clamp(26px, 9vw, 40px); line-height: 1.1; color: var(--brass); text-shadow: 0 3px 0 #000a, 0 0 20px #000c; }
   .decl.h-win .dw, .decl.h-theyfold .dw { color: var(--brass); }
   .decl.h-lose .dw { color: var(--bad); }
   .decl.h-split .dw, .decl.h-fold .dw { color: var(--ivory); }
@@ -516,11 +517,6 @@
   .decl.ko .dw { color: var(--brass); }
   .decl.busted { background: radial-gradient(circle, #2a0810d9 25%, #b3202ff0 120%); }
   .decl.busted .dw { color: var(--ivory); }
-  .stamp {
-    position: absolute; right: 0; top: -4px; z-index: 3; pointer-events: none;
-    font-family: var(--f-display); font-weight: 800; font-size: 20px; color: var(--bad);
-    padding: 2px 12px; border: 3px solid var(--bad); border-radius: 6px; background: #12080dcc;
-  }
   .actions.wait { opacity: 0; visibility: hidden; pointer-events: none; }
 
   /* 타이틀 장식: 떠다니는 무늬, 로열 플러시 부채 */
