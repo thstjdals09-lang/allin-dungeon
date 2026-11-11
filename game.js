@@ -16,7 +16,7 @@
   let S = null; // 판 전체 상태 (JSON 으로 저장)
   // 저장하지 않는 화면 상태. fx = 이번 클릭에서 일어난 일(fx.js 가 연출), from = 누른 버튼 위치
   // mapSel = 지도에서 눌러 둔 칸(들어가기 전 확인용)
-  let ui = { modal: null, swap: false, toast: '', fx: [], from: null, screen: null, mapSel: null };
+  let ui = { modal: null, swap: false, toast: '', fx: [], from: null, screen: null, mapSel: null, restPick: null };
   const { cardName, cardHTML, backHTML, slotHTML, btn, bar } = V;
 
   const has = (k) => S.charms.includes(k);
@@ -75,6 +75,7 @@
     } else S.step++;
     S.node = null;
     ui.mapSel = null;
+    ui.restPick = null;
     S.screen = 'map';
   }
 
@@ -234,9 +235,18 @@
     S.stats.kills++;
     note({ kills: P.kills + 1 });
     const charms = AD.randomCharms(kind === 'boss' ? 3 : kind === 'elite' ? 2 : 0, S.charms, rnd);
-    S.reward = { gold, cards: [0, 1, 2].map(() => AD.randomCard(S.floor, newId, rnd)), charms, cardDone: false, charmDone: !charms.length };
+    S.reward = { gold, cards: [0, 1, 2].map(() => AD.randomCard(S.floor, newId, rnd)), charms, cardPick: null, charmPick: null };
     S.battle = null;
     S.screen = 'reward';
+  }
+
+  // 보상 화면에서 고른 카드·유물을 떠날 때 넣는다
+  function takeReward() {
+    const r = S.reward;
+    const card = r.cardPick !== null && r.cardPick !== undefined ? r.cards[r.cardPick] : null;
+    if (card) S.deck = [...S.deck, card];
+    if (r.charmPick) gainCharm(r.charmPick);
+    if (card || r.charmPick) fx({ t: 'coin' });
   }
 
   /* ───────── 상점·이벤트 ───────── */
@@ -383,21 +393,13 @@
       if (S.battle.enemy.hp <= 0) return winMatch();
       startHand();
     },
-    takeCard(i) {
-      const r = S.reward;
-      if (r.cardDone) return;
-      S.deck = [...S.deck, r.cards[+i]];
-      S.reward = { ...r, cardDone: true, took: r.cards[+i].id };
-      fx({ t: 'coin' });
+    // 보상은 고르기만 하고 떠날 때 확정한다. 다시 누르면 취소, 다른 걸 누르면 바뀐다.
+    takeCard(i) { const r = S.reward; S.reward = { ...r, cardPick: r.cardPick === +i ? null : +i }; },
+    takeCharm(id) { const r = S.reward; S.reward = { ...r, charmPick: r.charmPick === id ? null : id }; },
+    leave() {
+      if (S.screen === 'reward') takeReward();
+      advance();
     },
-    takeCharm(id) {
-      const r = S.reward;
-      if (r.charmDone) return;
-      gainCharm(id);
-      S.reward = { ...r, charmDone: true, tookCharm: id };
-      fx({ t: 'coin' });
-    },
-    leave() { advance(); },
     buyCard(i) {
       const item = S.shop.cards[+i];
       if (item.sold) return;
@@ -421,15 +423,22 @@
       if (S.deck.length <= MIN_DECK) return toast(`덱이 ${MIN_DECK}장 이하라 더 뺄 수 없습니다`);
       ui.modal = { type: 'deck', purpose: 'remove', cost: S.removeCost, from: 'shop' };
     },
-    rest() { heal(Math.ceil(S.maxHp * 0.3)); advance(); },
-    enchantOpen(en) {
+    // 휴게실: 고르기(바꿀 수 있음) → 결정. 강화는 결정한 뒤 카드를 고른다.
+    restPick(k) { ui.restPick = ui.restPick === k ? null : k; },
+    restGo() {
+      const k = ui.restPick;
+      if (!k) return toast('하나를 먼저 고르세요');
+      if (k === 'rest') { heal(Math.ceil(S.maxHp * 0.3)); advance(); return; }
       if (!S.deck.some((c) => !c.en)) return toast('강화 안 된 카드가 없습니다');
-      ui.modal = { type: 'deck', purpose: 'enchant', en, from: 'rest' };
+      ui.modal = { type: 'deck', purpose: 'enchant', en: k, from: 'rest' };
     },
-    pickDeck(id) {
+    // 덱 시트(강화·제거): 카드를 누르면 고르기만, 확인 버튼에서 적용
+    pickDeck(id) { if (ui.modal) ui.modal = { ...ui.modal, pick: ui.modal.pick === id ? null : id }; },
+    deckConfirm() {
       const m = ui.modal;
-      const card = S.deck.find((c) => c.id === id);
-      if (!m || !card) return;
+      const id = m && m.pick;
+      const card = id && S.deck.find((c) => c.id === id);
+      if (!card) return toast('카드를 먼저 고르세요');
       ui.modal = null;
       if (m.purpose === 'remove') {
         S.deck = S.deck.filter((c) => c.id !== id);
@@ -623,29 +632,25 @@
     return `<small class="same">${taken ? `덱에 ${AD.rankLabel(c.r)} ${n}장` : `넣으면 ${AD.rankLabel(c.r)} ${n + 1}장`}</small>`;
   }
 
-  function charmCard(id, act, extra = '', disabled = false) {
-    const c = AD.CHARMS[id];
-    return `<button class="charmcard" data-act="${act}" data-arg="${id}"${disabled ? ' disabled' : ''}><b>${c.name}</b><span>${c.desc}</span>${extra}</button>`;
-  }
-
   function vReward() {
     const r = S.reward;
-    const cards = r.cards.map((c, i) => `<div class="offer${r.took === c.id ? ' taken' : ''}">
-        ${cardHTML(c, r.cardDone ? {} : { act: 'takeCard', arg: i })}
+    const cards = r.cards.map((c, i) => `<div class="offer${r.cardPick === i ? ' picked' : ''}">
+        ${cardHTML(c, { act: 'takeCard', arg: i, sel: r.cardPick === i })}
         <small>${c.en ? AD.ENCHANTS[c.en].desc : '강화 없음'}</small>
-        ${sameRank(c, r.took === c.id)}
+        ${sameRank(c, false)}
       </div>`).join('');
     const charms = r.charms.length
-      ? `<h3 class="sub">유물 1개</h3><div class="charmrow">${r.charms.map((id) => charmCard(id, 'takeCharm', r.tookCharm === id ? '<em>획득</em>' : '', r.charmDone)).join('')}</div>`
+      ? `<h3 class="sub">유물 1개 · 고르지 않아도 됩니다</h3><div class="charmrow">${r.charms.map((id) =>
+        `<button class="charmcard${r.charmPick === id ? ' chosen' : ''}" data-act="takeCharm" data-arg="${id}" aria-pressed="${r.charmPick === id}"><b>${AD.CHARMS[id].name}</b><span>${AD.CHARMS[id].desc}</span></button>`).join('')}</div>`
       : '';
-    const done = r.cardDone && r.charmDone;
+    const picked = (r.cardPick !== null && r.cardPick !== undefined) || r.charmPick;
     return `<main class="screen reward">
       <p class="eyebrow">매치 승리</p>
       <h2 class="h">상금 +<span class="count num" data-n="${r.gold}">${r.gold}</span></h2>
-      <h3 class="sub">덱에 넣을 카드 1장${r.cardDone ? ' · 선택함' : ''}</h3>
+      <h3 class="sub">덱에 넣을 카드 1장 · 다시 누르면 취소</h3>
       <div class="offers">${cards}</div>
       ${charms}
-      <div class="actions">${btn(done ? '계속' : '건너뛰고 계속', 'leave', undefined, done ? 'primary wide' : 'ghost wide')}</div>
+      <div class="actions">${picked ? btn('가져가고 계속', 'leave', undefined, 'primary wide') : btn('아무것도 안 받고 계속', 'leave', undefined, 'ghost wide')}</div>
     </main>`;
   }
 
@@ -672,16 +677,21 @@
 
   function vRest() {
     const heal = Math.ceil(S.maxHp * 0.3);
-    const offers = S.rest.offers.map((en) => `<button class="charmcard" data-act="enchantOpen" data-arg="${en}">
-        <b><span class="seal seal-${en} inline">${AD.ENCHANTS[en].seal}</span>${AD.ENCHANTS[en].name} 강화</b><span>${AD.ENCHANTS[en].desc}</span></button>`).join('');
+    const pick = ui.restPick;
+    const opt = (key, title, desc) =>
+      `<button class="charmcard${pick === key ? ' chosen' : ''}" data-act="restPick" data-arg="${key}" aria-pressed="${pick === key}"><b>${title}</b><span>${desc}</span></button>`;
+    const offers = S.rest.offers.map((en) =>
+      opt(en, `<span class="seal seal-${en} inline">${AD.ENCHANTS[en].seal}</span>${AD.ENCHANTS[en].name} 강화`, AD.ENCHANTS[en].desc)).join('');
+    const go = pick === 'rest' ? `쉬기 · 스택 +${heal}` : pick ? '강화할 카드 고르기' : '결정';
     return `<main class="screen rest">
       <p class="eyebrow">휴게실</p>
       <h2 class="h">하나만 고르세요.</h2>
       <div class="charmrow">
-        <button class="charmcard" data-act="rest"><b>쉬기</b><span>스택 +${heal} (지금 ${S.hp}/${S.maxHp})</span></button>
+        ${opt('rest', '쉬기', `스택 +${heal} (지금 ${S.hp}/${S.maxHp})`)}
         ${offers}
       </div>
-      <p class="note">강화는 아직 강화되지 않은 카드에만 할 수 있습니다.</p>
+      <p class="note">고른 뒤에도 결정 전까지 바꿀 수 있습니다. 강화는 아직 강화되지 않은 카드에만 됩니다.</p>
+      <div class="actions">${btn('그냥 지나가기', 'leave', undefined, 'ghost')}${btn(go, 'restGo', undefined, 'primary', !pick)}</div>
     </main>`;
   }
 
