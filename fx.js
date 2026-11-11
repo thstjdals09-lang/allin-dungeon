@@ -113,6 +113,10 @@
   // 들어오는 연출은 끝나면 인라인 스타일을 지워 CSS 상태(선택 카드 들림 등)로 돌아가게 한다
   const clean = (els) => () => els.forEach((el) => { el.style.transform = ''; el.style.opacity = ''; });
 
+  // 선언·K.O. 같은 큰 연출 요소. 다음 렌더(run)가 시작되면 남은 것을 모두 치운다.
+  const live = new Set();
+  const clearLive = () => { live.forEach((el) => el.remove()); live.clear(); };
+
   // body 에 잠깐 붙였다가 연출이 끝나면 떼는 요소
   function overlay(cls, html, style = {}) {
     const el = document.createElement('div');
@@ -177,6 +181,77 @@
       .add(el, { opacity: [0, 1], duration: 120, ease: 'linear' }, 0)
       .add(el.firstChild, { scale: [2.6, 1], rotate: [-10, -4], duration: 420, ease: EASE }, 0)
       .add(el, { opacity: 0, duration: 260, ease: 'inQuad' }, 820);
+  }
+
+
+  /* ───────── 판 선언 / K.O. / BUSTED: 큰 영어 글자가 한 글자씩 떨어지고 한국어 한 줄이 따라온다 ───────── */
+  const DECL = {
+    win: { word: 'WIN', sound: 'win' }, lose: { word: 'LOSE', sound: 'lose' }, split: { word: 'SPLIT', sound: 'card' },
+    fold: { word: 'FOLD', sound: 'fold' }, theyfold: { word: 'THEY FOLD', sound: 'win' },
+  };
+  const DECL_MS = 1100;
+  const END_MS = 1400;
+  const esc = (t) => String(t).replace(/[&<>]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' }[c]));
+
+  // 글자 요소를 만들어 붙이고 돌려준다. 동작 줄이기·anime 없음이면 정지한 채 보이고 같은 시간 뒤 사라진다(CSS 만).
+  function stage(cls, word, sub, ms) {
+    // 단어마다 줄바꿈 단위로 묶고, 가장 긴 단어 글자 수(--n)로 글자 크기를 정해 360px 에 들어가게 한다
+    const words = word.split(' ');
+    const letters = words.map((w) => `<span class="wd">${[...w].map((ch) => `<i class="l">${esc(ch)}</i>`).join('')}</span>`).join('');
+    const el = overlay(`decl ${cls}`, `<b class="dw" aria-label="${esc(word)}" style="--n:${Math.max(...words.map((w) => w.length))}">${letters}</b>${sub ? `<span class="ds">${esc(sub)}</span>` : ''}`);
+    live.add(el);
+    later(ms, () => { el.remove(); live.delete(el); });
+    return el;
+  }
+
+  // 모션: 글자가 위에서 떨어져 도장처럼 찍히고, 끝에서 결과 줄 쪽(아래)으로 줄어들며 사라진다
+  function playDecl(el, ms) {
+    if (!on()) return;
+    const ls = $$('.l', el);
+    const sub = $('.ds', el);
+    el.style.opacity = '0';
+    A.createTimeline({ onComplete: () => { el.remove(); live.delete(el); } })
+      .add(el, { opacity: [0, 1], duration: 120, ease: 'linear' }, 0)
+      .add(ls, { y: [-90, 0], scale: [2.2, 1], opacity: [0, 1], duration: 380, delay: A.stagger(45), ease: 'outBack(1.4)' }, 0)
+      .add(sub, { opacity: [0, 1], y: [10, 0], duration: 260, ease: EASE }, 300)
+      .add(el, { opacity: 0, y: 70, scale: 0.55, duration: 300, ease: 'inQuad' }, ms - 300);
+  }
+
+  // 판 하나가 끝났을 때의 선언. 끝나는 시각을 돌려준다.
+  function declare(kind, sub, at) {
+    later(at, () => {
+      const d = DECL[kind];
+      sound(d.sound);
+      const el = stage(`h-${kind}`, d.word, sub, DECL_MS);
+      playDecl(el, DECL_MS);
+      if (kind === 'win' || kind === 'theyfold') burst($('.dw', el), 18);
+      if (kind === 'lose') shake($('main'), 9);
+    });
+    return at + DECL_MS;
+  }
+
+  // 매치가 끝났을 때(이김 K.O. / 보스 / 최종 보스, 또는 스택 0 BUSTED). 판 선언 뒤에 이어 붙는다.
+  function ending(ev, at) {
+    if (!ev.kill && !ev.bust) return at;
+    const last = ev.node === 'boss';
+    const word = ev.bust ? 'BUSTED' : last ? (ev.floor >= AD.FLOORS ? 'HOUSE CONQUERED' : `FLOOR ${ev.floor} CLEAR`) : 'K.O.';
+    later(at, () => {
+      sound(ev.bust ? 'bust' : 'big');
+      const el = stage(ev.bust ? 'busted' : 'ko', word, '', END_MS);
+      if (!on()) return;
+      const ls = $$('.l', el);
+      el.style.opacity = '0';
+      A.createTimeline({ onComplete: () => { el.remove(); live.delete(el); } })
+        .add(el, { opacity: [0, 1], duration: 160, ease: 'linear' }, 0)
+        .add(ls, { y: [-140, 0], scale: [3, 1], rotate: () => A.utils.random(-12, 12), opacity: [0, 1], duration: 420, delay: A.stagger(40), ease: 'outBack(1.2)' }, 0)
+        .add(el, { opacity: 0, duration: 260, ease: 'inQuad' }, END_MS - 260);
+      if (ev.bust) {
+        A.animate($$('.hand .card'), { x: () => A.utils.random(-130, 130), y: () => A.utils.random(-90, 110), rotate: () => A.utils.random(-70, 70), opacity: 0.2, duration: 700, ease: 'outCubic' });
+      } else {
+        later(180, () => burst($('.dw', el), 30));
+      }
+    });
+    return at + END_MS;
   }
 
   // 결과가 다 보일 때까지 다음 버튼을 숨긴다(visibility 라 키보드로도 못 누른다).
@@ -325,47 +400,37 @@
       let t = flipIn($$('.ehole .card.deal'), at) + 80;
       const used = $$('.board .card.used, .hand .card.used, .ehole .card.used');
       later(t, () => {
-        sound(ev.winner > 0 ? 'win' : ev.winner < 0 ? 'lose' : 'card');
         if (on() && used.length) A.animate(used, { scale: [1, 1.1, 1], duration: 480, delay: A.stagger(35), ease: 'inOutSine', onComplete: clean(used) });
       });
-      if (ev.winner > 0 && ev.cat >= 4) { later(t + 250, () => cutin(ev.name)); t += 900; }
-      appear($('.result'), t);
-      t += 200;
-      later(t, () => hitOutcome(ev));
-      barDelay = t;
-      holdActions(t + 450);
-      return t + 450;
+      const verdict = ev.winner > 0 ? `상대 −${ev.toEnemy}` : ev.winner < 0 ? `스택 −${ev.toPlayer}` : '';
+      const sub = [`${ev.pdesc} vs ${ev.edesc}`, verdict].filter(Boolean).join(' · ');
+      t = declare(ev.winner > 0 ? 'win' : ev.winner < 0 ? 'lose' : 'split', sub, t + 150);
+      return finishHand(ev, t, ev);
     },
     efold(ev, at) {
       const t = flipIn($$('.ehole .card.deal'), at);
-      later(at, () => {
-        sound('fold');
-        const panel = $('.enemy');
-        if (!on() || !panel) return;
-        const stamp = document.createElement('div');
-        stamp.className = 'stamp';
-        stamp.textContent = '폴드';
-        panel.appendChild(stamp);
-        A.animate(stamp, { scale: [2.4, 1], opacity: [0, 1], rotate: [-18, -8], duration: 420, ease: EASE });
-      });
-      appear($('.result'), t);
-      later(t, () => hitOutcome({ toEnemy: ev.d, kill: ev.kill }));
-      barDelay = t;
-      holdActions(t + 400);
-      return t + 400;
+      const end = declare('theyfold', `상대가 폴드 · 상대 −${ev.d}`, t + 100);
+      return finishHand(ev, end, { toEnemy: ev.d, kill: ev.kill });
     },
     pfold(ev, at) {
-      sound('fold');
       const mine = $$('.hand .card.sel');
       if (on() && mine.length) A.animate(mine, { y: [0, 36], rotate: [0, 8], opacity: [1, 0.25], duration: 420, ease: 'inQuad' });
-      appear($('.result'), at + 250);
-      later(at + 250, () => hitOutcome({ toPlayer: ev.d, bust: ev.bust }));
-      barDelay = at + 250;
-      holdActions(at + 600);
-      return at + 600;
+      const end = declare('fold', `폴드 · 스택 −${ev.d}`, at + 100);
+      return finishHand(ev, end, { toPlayer: ev.d, bust: ev.bust });
     },
     coin(ev, at) { sound('coin'); return at; },
   };
+
+  // 선언이 줄어드는 동안 결과 줄이 나타나고, 끝나면 데미지 → (K.O./BUSTED) → 버튼 순서
+  function finishHand(ev, t, hit) {
+    appear($('.result'), t - 250);
+    later(t, () => hitOutcome(hit));
+    barDelay = t;
+    const end = ending(ev, t + 450);
+    const done = end === t + 450 ? t + 450 : end + 100;
+    holdActions(done);
+    return done;
+  }
 
   function hitOutcome(ev) {
     if (ev.toEnemy) {
@@ -382,11 +447,12 @@
     if (ev.heal) float($('.top .stack'), `+${ev.heal}`, 'good');
     if (ev.enemyHeal) float($('.enemy .hpline'), `+${ev.enemyHeal}`, 'good');
     if (ev.kill) later(250, () => { burst($('.enemy .medal'), 24); sound('coin'); });
-    if (ev.bust) later(250, () => { sound('bust'); flash('red'); });
+    if (ev.bust) later(250, () => flash('red'));
   }
 
   function run(events, opt) {
     gen++;
+    clearLive();
     barDelay = 0;
     if (opt.changed) bars.clear(); // 다른 화면·다른 상대의 막대 값에서 이어지지 않게
     const busy = events.some((e) => e.t === 'show' || e.t === 'efold');

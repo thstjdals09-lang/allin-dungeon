@@ -134,7 +134,7 @@ window.BATTLE = function (C) {
       if (has('bluffbadge')) { C.S.gold += 4; log('허풍선이 배지 · 상금 +4'); }
       b.enemy.hp -= d;
       b.shown = b.shown.map(() => true);
-      fx({ t: 'efold', d, kill: b.enemy.hp <= 0 });
+      fx({ t: 'efold', d, kill: b.enemy.hp <= 0, node: C.S.node, floor: C.S.floor });
       endHand(b, { type: 'efold', toEnemy: d }, `${where} → 상대 폴드 · 상대 스택 −${d}`);
       return;
     }
@@ -199,6 +199,7 @@ window.BATTLE = function (C) {
     fx({
       t: 'show', winner: out.winner, toEnemy: out.toEnemy, toPlayer: out.toPlayer, heal: out.heal, enemyHeal: out.enemyHeal,
       cat: pres.cat, name: AD.isRoyal(pres) ? '로열 플러시' : AD.HANDS[pres.cat].name, kill: b.enemy.hp <= 0, bust: C.S.hp <= 0,
+      pdesc: result.pdesc, edesc: result.edesc, node: C.S.node, floor: C.S.floor,
     });
     const verdict = out.winner > 0 ? `상대 스택 −${out.toEnemy}` : out.winner < 0 ? `스택 −${out.toPlayer}` : '스플릿';
     endHand(b, result, `쇼다운 ${result.pdesc} vs ${result.edesc} → ${verdict}`);

@@ -30,7 +30,7 @@
     color-scheme: dark;
   }
   *, *::before, *::after { box-sizing: border-box; }
-  html, body { height: 100%; }
+  html, body { height: 100%; overflow-x: clip; } /* 카드가 흩어지는 연출이 가로 스크롤을 만들지 않게 */
   body {
     background-color: var(--felt);
     background-image: radial-gradient(110% 75% at 50% 38%, var(--felt-2), var(--felt) 58%, var(--felt-edge));
@@ -503,6 +503,19 @@
     text-wrap: nowrap;
   }
   .cutin.gold b { background: #15100f; color: var(--brass); box-shadow: 0 0 0 4px var(--brass), 0 0 0 8px #15100f, 0 20px 50px #000c; }
+  /* 판 선언·K.O.·BUSTED: 영어 큰 글자(표시 글꼴) + 한국어 한 줄 */
+  .decl { position: fixed; inset: 0; z-index: 46; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 10px; padding: 0 16px; pointer-events: none; text-align: center; }
+  .decl .dw { display: flex; flex-wrap: wrap; justify-content: center; font-family: var(--f-display); font-weight: 800; font-size: min(108px, calc(86vw / (var(--n) * .75))); column-gap: .3em; line-height: 1; letter-spacing: -.02em; text-shadow: 0 4px 0 #000a, 0 0 28px #000c; }
+  .decl .l { display: inline-block; font-style: normal; }
+  .decl .wd { display: flex; }
+  .decl .ds { max-width: 92vw; padding: 5px 12px; border-radius: 6px; background: #12080dcc; color: var(--ivory); font-size: 15px; line-height: 1.35; }
+  .decl.h-win .dw, .decl.h-theyfold .dw { color: var(--brass); }
+  .decl.h-lose .dw { color: var(--bad); }
+  .decl.h-split .dw, .decl.h-fold .dw { color: var(--ivory); }
+  .decl.ko, .decl.busted { background: #0b0508d9; }
+  .decl.ko .dw { color: var(--brass); }
+  .decl.busted { background: radial-gradient(circle, #2a0810d9 25%, #b3202ff0 120%); }
+  .decl.busted .dw { color: var(--ivory); }
   .stamp {
     position: absolute; right: 0; top: -4px; z-index: 3; pointer-events: none;
     font-family: var(--f-display); font-weight: 800; font-size: 20px; color: var(--bad);
