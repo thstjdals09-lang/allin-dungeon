@@ -70,13 +70,13 @@
     { id: 'loanshark', floor: 2, kind: 'normal', name: '사채업자', glyph: '채', hp: 34, mul: 1.2, tight: 0.9, lie: 0.2, heal: 4, desc: '이길 때마다 스택을 채운다.' },
     { id: 'twins', floor: 2, kind: 'normal', name: '쌍둥이 딜러', glyph: '쌍', hp: 28, mul: 0.9, tight: 1, lie: 0.2, hole: 3, desc: '카드 3장을 받아 그중에서 핸드를 고른다.' },
     { id: 'iron', floor: 2, kind: 'normal', name: '무쇠손', glyph: '쇠', hp: 34, mul: 1.2, tight: 0.8, lie: 0.2, armor: 2, desc: '져도 칩을 덜 잃는다.' },
-    { id: 'magician', floor: 2, kind: 'elite', name: '카드 마술사', glyph: '마', hp: 48, mul: 1, tight: 0.8, lie: 0.6, hole: 3, bluff: 0.3, rule: 'swapRandom', desc: '텔도 카드도 믿을 수 없다.' },
-    { id: 'croupier', floor: 2, kind: 'boss', name: '수석 크루피어', glyph: '딜', hp: 80, mul: 1.1, tight: 0.5, lie: 0.3, hole: 3, armor: 1, bluff: 0.15, rule: 'rigBoard', desc: '2층의 모든 테이블을 돌리는 사람.' },
+    { id: 'magician', floor: 2, kind: 'elite', name: '카드 마술사', glyph: '마', hp: 40, mul: 0.9, tight: 0.8, lie: 0.6, hole: 3, bluff: 0.3, rule: 'swapRandom', desc: '텔도 카드도 믿을 수 없다.' },
+    { id: 'croupier', floor: 2, kind: 'boss', name: '수석 크루피어', glyph: '딜', hp: 48, mul: 0.85, tight: 0.5, lie: 0.3, hole: 3, armor: 1, bluff: 0.15, rule: 'rigBoard', desc: '2층의 모든 테이블을 돌리는 사람.' },
 
     { id: 'gambler', floor: 3, kind: 'normal', name: '빚더미 노름꾼', glyph: '빚', hp: 42, mul: 1.4, tight: 0.5, lie: 0.3, bluff: 0.25, desc: '잃을 게 없어서 폴드를 잘 안 한다.' },
     { id: 'ghost', floor: 3, kind: 'normal', name: '유령 손님', glyph: '령', hp: 40, mul: 1.4, tight: 0.9, poker: true, desc: '얼굴이 없어 텔도 없다.' },
     { id: 'banker', floor: 3, kind: 'normal', name: '금고지기', glyph: '금', hp: 44, mul: 1.3, tight: 0.9, lie: 0.2, armor: 3, desc: '져도 칩을 많이 덜 잃는다.' },
-    { id: 'shark', floor: 3, kind: 'elite', name: '큰손', glyph: '큰', hp: 58, mul: 1.2, tight: 0.6, lie: 0.3, hole: 3, armor: 1, rule: 'bigPot', desc: '큰 팟을 좋아한다.' },
+    { id: 'shark', floor: 3, kind: 'elite', name: '큰손', glyph: '큰', hp: 44, mul: 1.1, tight: 0.6, lie: 0.3, hole: 3, armor: 1, rule: 'bigPot', desc: '큰 팟을 좋아한다.' },
     { id: 'house', floor: 3, kind: 'boss', name: '하우스의 주인', glyph: '주', hp: 85, mul: 1.3, tight: 0, poker: true, hole: 3, armor: 2, bluff: 0.15, rule: 'hiddenCard', desc: '폴드하지 않는다. 텔도 없다.' },
   ];
 

@@ -228,8 +228,11 @@ assert.strictEqual(AD.pickEnemy(1, 'normal').bluff >= 0.1, true);
   const royal = AD.equityAtFlop(C('2♣ 3♦'), C('4♣ 5♦'), C('A♠ K♠ Q♠'), []);
   assert.ok(royal.tie > 0);
   // deadIds 로 나간 카드를 빼면 가짓수가 줄고 합은 여전히 1
-  const dead = AD.equityAtFlop(C('Q♠ K♠'), C('2♥ 3♦'), C('A♠ J♠ T♠'), ['t9-0-9']);
-  assert.ok(Math.abs(dead.win + dead.tie + dead.lose - 1) < 1e-9);
+  // 내 Q♠K♠ 가 테이블 덱에도 있어 둘이 함께 나오는 1가지 런아웃만 비긴다(1/1081). Q♠ 를 deadIds 에 넣으면 그 런아웃이 사라져 비김 0
+  const live = AD.equityAtFlop(C('Q♠ K♠'), C('2♥ 3♦'), C('A♠ J♠ T♠'), []);
+  assert.ok(Math.abs(live.tie - 1 / 1081) < 1e-12);
+  const dead = AD.equityAtFlop(C('Q♠ K♠'), C('2♥ 3♦'), C('A♠ J♠ T♠'), ['t9-0-12']);
+  assert.strictEqual(dead.tie, 0); assert.strictEqual(dead.win, 1);
   // 한 줄 평
   assert.strictEqual(AD.reviewVerdict('pfold', 50, true), 'regret');
   assert.strictEqual(AD.reviewVerdict('pfold', 49, true), null);
