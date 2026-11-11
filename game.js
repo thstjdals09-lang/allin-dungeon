@@ -22,7 +22,7 @@
   };
   // 저장하지 않는 화면 상태. fx = 이번 클릭에서 일어난 일(fx.js 가 연출), from = 누른 버튼 위치
   // mapSel = 지도에서 눌러 둔 칸(들어가기 전 확인용)
-  let ui = { modal: null, swap: false, toast: '', fx: [], from: null, screen: null, mapSel: null, restPick: null };
+  let ui = { modal: null, swap: false, toast: '', fx: [], from: null, screen: null, mapSel: null, restPick: null, shopPick: null };
   const { cardName, cardHTML, backHTML, slotHTML, btn, bar } = V;
 
   const has = (k) => S.charms.includes(k);
@@ -60,6 +60,7 @@
     V.resetSeen(); // 카드 id 가 c0 부터 다시 쓰이므로 딜 연출 기록도 비운다
     ui.mapSel = null;
     ui.restPick = null;
+    ui.shopPick = null;
     const hero = META.charOf(char);
     const stack = META.startStack(hero.id, level);
     // 지도·덱을 만들 때 rnd 가 S.rngState 를 쓰도록 S 를 먼저 세우고 채운다
@@ -107,6 +108,7 @@
     S.node = null;
     ui.mapSel = null;
     ui.restPick = null;
+    ui.shopPick = null;
     S.screen = 'map';
   }
 
@@ -155,9 +157,17 @@
       }),
       charms: AD.randomCharms(2, S.charms, rnd).map((id) => ({ id, price: META.price(100 + Math.floor(rnd() * 4) * 10, S.level), sold: false })),
     };
+    ui.shopPick = null;
     S.screen = 'shop';
   }
 
+
+  function shopToggle(kind, i) {
+    const item = S.shop[kind === 'card' ? 'cards' : 'charms'][i];
+    if (!item || item.sold) return;
+    const p = ui.shopPick;
+    ui.shopPick = p && p.kind === kind && p.i === i ? null : { kind, i };
+  }
 
   /* ───────── 버튼 동작 ───────── */
   const ACT = {
@@ -174,7 +184,7 @@
     },
     daily() { ui.modal = { type: 'newrun', daily: true }; },
     startDaily() { ui.modal = null; newRun({ daily: META.todayKey() }); },
-    cont() { S = loadSave(); ui.mapSel = null; },
+    cont() { S = loadSave(); ui.mapSel = null; ui.shopPick = null; },
     mapSel(i) { ui.mapSel = +i; },
     go(i) {
       if (S.screen !== 'map' || !choices().includes(+i)) return;
@@ -197,23 +207,21 @@
       if (S.screen === 'reward') takeReward();
       advance();
     },
-    buyCard(i) {
-      const item = S.shop.cards[+i];
-      if (item.sold) return;
+    // 상점은 고르기만 하고 [구매] 로 확정한다. 다시 누르면 취소, 다른 걸 누르면 바뀐다.
+    buyCard(i) { shopToggle('card', +i); },
+    buyCharm(i) { shopToggle('charm', +i); },
+    shopCancel() { ui.shopPick = null; },
+    buy() {
+      const p = ui.shopPick;
+      const item = p && S.shop[p.kind === 'card' ? 'cards' : 'charms'][p.i];
+      if (!item || item.sold) { ui.shopPick = null; return; }
       if (S.gold < item.price) return toast('상금이 모자랍니다');
       S.gold -= item.price;
       fx({ t: 'coin' });
-      S.deck = [...S.deck, item.card];
-      S.shop = { ...S.shop, cards: S.shop.cards.map((x, k) => (k === +i ? { ...x, sold: true } : x)) };
-    },
-    buyCharm(i) {
-      const item = S.shop.charms[+i];
-      if (item.sold) return;
-      if (S.gold < item.price) return toast('상금이 모자랍니다');
-      S.gold -= item.price;
-      fx({ t: 'coin' });
-      gainCharm(item.id);
-      S.shop = { ...S.shop, charms: S.shop.charms.map((x, k) => (k === +i ? { ...x, sold: true } : x)) };
+      if (p.kind === 'card') S.deck = [...S.deck, item.card]; else gainCharm(item.id);
+      const key = p.kind === 'card' ? 'cards' : 'charms';
+      S.shop = { ...S.shop, [key]: S.shop[key].map((x, k) => (k === p.i ? { ...x, sold: true } : x)) };
+      ui.shopPick = null;
     },
     removeOpen() {
       if (S.gold < S.removeCost) return toast('상금이 모자랍니다');
@@ -360,27 +368,44 @@
     </main>`;
   }
 
+  // 고른 것의 이름·설명·값과 [구매]. 고르는 동안 제거·나가기 줄을 대신하고 [취소] 로 돌아간다.
+  function shopPanel(pk) {
+    const isCard = pk.kind === 'card';
+    const item = S.shop[isCard ? 'cards' : 'charms'][pk.i];
+    const name = isCard ? cardName(item.card) : AD.CHARMS[item.id].name;
+    const desc = isCard
+      ? `${item.card.en ? AD.ENCHANTS[item.card.en].desc : '강화 없음'} · 넣으면 ${AD.rankLabel(item.card.r)} ${S.deck.filter((d) => d.r === item.card.r).length + 1}장`
+      : AD.CHARMS[item.id].desc;
+    const short = item.price - S.gold;
+    const buyBtn = short > 0
+      ? btn(`상금이 ${short} 모자랍니다`, 'buy', undefined, 'primary wide', true)
+      : btn(`구매 · ${item.price}`, 'buy', undefined, 'primary wide');
+    return `<div class="actions shoppick"><div class="pickinfo"><b>${name}</b><span>${desc}</span></div>
+      <div class="pickbtns">${buyBtn}${btn('취소', 'shopCancel', undefined, 'ghost')}</div></div>`;
+  }
+
   function vShop() {
     const sh = S.shop;
-    const cards = sh.cards.map((x, i) => `<div class="offer${x.sold ? ' taken' : ''}">
-        ${cardHTML(x.card, x.sold ? {} : { act: 'buyCard', arg: i })}
+    const pk = ui.shopPick;
+    const cards = sh.cards.map((x, i) => `<div class="offer${x.sold ? ' taken' : ''}${pk && pk.kind === 'card' && pk.i === i ? ' picked' : ''}">
+        ${cardHTML(x.card, x.sold ? {} : { act: 'buyCard', arg: i, sel: !!pk && pk.kind === 'card' && pk.i === i })}
         <small>${x.card.en ? AD.ENCHANTS[x.card.en].desc : '강화 없음'}</small>
         ${sameRank(x.card, x.sold)}
         <b class="price num">${x.sold ? '구매함' : `${x.price}`}</b>
       </div>`).join('');
-    const charms = sh.charms.map((x, i) => `<button class="charmcard" data-act="buyCharm" data-arg="${i}"${x.sold ? ' disabled' : ''}>
+    const charms = sh.charms.map((x, i) => `<button class="charmcard${pk && pk.kind === 'charm' && pk.i === i ? ' chosen' : ''}" data-act="buyCharm" data-arg="${i}" aria-pressed="${!!pk && pk.kind === 'charm' && pk.i === i}"${x.sold ? ' disabled' : ''}>
         <b>${AD.CHARMS[x.id].name}</b><span>${AD.CHARMS[x.id].desc}</span><em class="num">${x.sold ? '구매함' : `${x.price}`}</em></button>`).join('');
     return `<main class="screen shop">
       <p class="eyebrow">상점</p>
       <h2 class="h">카드와 유물</h2>
-      <h3 class="sub">카드 · 누르면 구매</h3><div class="offers">${cards}</div>
+      <h3 class="sub">카드 · 눌러서 고르기</h3><div class="offers">${cards}</div>
       ${sh.charms.length ? `<h3 class="sub">유물</h3><div class="charmrow">${charms}</div>` : ''}
       <h3 class="sub">카드 제거</h3>
       <p class="note">덱이 얇을수록 좋은 카드가 자주 들어옵니다. 제거할 때마다 값이 25씩 오릅니다.</p>
       <h3 class="sub">카드 복제</h3>
       <p class="note">고른 카드의 강화 없는 사본을 덱에 넣습니다. 쓸 때마다 값이 20씩 오릅니다.</p>
       <div class="actions">${btn(`카드 복제 · ${S.dupCost}`, 'dupOpen', undefined, 'ghost')}</div>
-      <div class="actions">${btn(`카드 제거 · ${S.removeCost}`, 'removeOpen', undefined, 'ghost')}${btn('나가기', 'leave', undefined, 'primary')}</div>
+      ${pk ? shopPanel(pk) : `<div class="actions">${btn(`카드 제거 · ${S.removeCost}`, 'removeOpen', undefined, 'ghost')}${btn('나가기', 'leave', undefined, 'primary')}</div>`}
     </main>`;
   }
 
