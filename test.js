@@ -48,19 +48,22 @@ const enemy = { mul: 1.5, armor: 2, heal: 4 };
 const hole = [{ r: 14, s: 1, en: 'fire' }, { r: 13, s: 1, en: 'steel' }];
 const flush = best('2h 7h 9h Jh Kh 3c 4d');
 const pair = best('9s 9h 2d 3c 5s Kd Qh');
-let out = AD.resolveShowdown({ pres: flush, eres: pair, hole, mult: 2, charms: ['tattoo'], enemy });
+let out = AD.resolveShowdown({ pres: flush, eres: pair, hole, pot: 2, charms: ['tattoo'], enemy });
 assert.deepStrictEqual(out, { winner: 1, toEnemy: (12 + 4 + 10) * 2 - 2, toPlayer: 0, heal: 0, enemyHeal: 0 });
-out = AD.resolveShowdown({ pres: pair, eres: flush, hole, mult: 3, charms: ['ironchip'], enemy });
+out = AD.resolveShowdown({ pres: pair, eres: flush, hole, pot: 3, charms: ['ironchip'], enemy });
 assert.deepStrictEqual(out, { winner: -1, toEnemy: 0, toPlayer: Math.round(12 * 3 * 1.5) - 4 - 2, heal: 0, enemyHeal: 4 });
-out = AD.resolveShowdown({ pres: pair, eres: pair, hole, mult: 3, charms: [], enemy });
-assert.strictEqual(out.winner, 0, '무승부는 피해 없음');
-out = AD.resolveShowdown({ pres: best('9s 8h 2d 3c 5s Kd Qh'), eres: best('9s 8h 2d 3c 4s Kd Jh'), hole: [], mult: 1, charms: [], enemy: { mul: 1, armor: 9 } });
+out = AD.resolveShowdown({ pres: pair, eres: pair, hole, pot: 3, charms: [], enemy });
+assert.strictEqual(out.winner, 0, '스플릿은 아무도 안 잃음');
+out = AD.resolveShowdown({ pres: best('9s 8h 2d 3c 5s Kd Qh'), eres: best('9s 8h 2d 3c 4s Kd Jh'), hole: [], pot: 1, charms: [], enemy: { mul: 1, armor: 9 } });
 assert.strictEqual(out.toEnemy, 1, '방어가 커도 이기면 최소 1');
 
-// 절대 안 접는 상대, 체크(×1)에는 아무도 안 접는다
-assert.strictEqual(AD.enemyFolds({ tight: 0 }, 0, 3), false);
-assert.strictEqual(AD.enemyFolds({ tight: 1 }, 0, 1), false);
-assert.strictEqual(AD.enemyFolds({ tight: 1 }, 0.1, 3, 1, () => 0.5), true);
+// 폴드 안 하는 상대, 약한 패는 올인에 폴드, 센 패는 벳에 콜
+assert.strictEqual(AD.enemyFolds({ tight: 0 }, 0, true), false);
+assert.strictEqual(AD.enemyFolds({ tight: 1 }, 0.1, true, 1, () => 0.5), true);
+assert.strictEqual(AD.enemyFolds({ tight: 1 }, 0.9, false, 1, () => 0.5), false);
+// 플러시 드로우 가산은 리버 전까지만
+const fd = C('2h 3h'), turnBoard = C('7h 9h Kc Qd'), riverBoard = C('7h 9h Kc Qd 4s');
+assert(AD.strength(fd, turnBoard) > AD.strength(fd, riverBoard));
 
 // 지도: 첫 칸은 전투, 마지막은 보스, 선택지는 겹치지 않는다
 assert.deepStrictEqual(AD.mapChoices(0), ['fight']);
@@ -76,7 +79,7 @@ console.log('logic 테스트 통과');
 
 if (process.argv.includes('--sim')) sim();
 
-// 단순한 플레이어(손기술·표정 무시, 센 패면 올인)로 상대별 받는 피해를 잰다
+// 단순한 플레이어(체인지·유물 안 씀, 거리마다 패 세기로 벳)로 상대별 잃는 스택을 잰다
 function sim() {
   const N = 3000;
   let n = 0;
@@ -108,20 +111,30 @@ function fight(enemy, deck) {
     const hand = draw.slice(0, 5); draw = draw.slice(5); discard.push(...hand);
     const table = AD.shuffle(AD.tableDeck(hands));
     const ehole = table.slice(0, enemy.hole);
-    const flop = table.slice(enemy.hole, enemy.hole + 3);
-    const rest = table.slice(enemy.hole + 3, enemy.hole + 5);
+    const full = table.slice(enemy.hole, enemy.hole + 5);
+    const flop = full.slice(0, 3);
     let hole = null, mine = null;
     for (let i = 0; i < hand.length; i++) for (let j = i + 1; j < hand.length; j++) {
       const r = AD.best([hand[i], hand[j], ...flop]);
       if (!mine || r.score > mine.score) { mine = r; hole = [hand[i], hand[j]]; }
     }
-    const mult = mine.cat >= 3 ? 3 : mine.cat === 2 || (mine.cat === 1 && mine.tb[0] >= 10) ? 2 : 1;
     hands++;
-    const v = AD.strength(ehole, flop);
-    if (mine.cat === 0 && AD.tellOf(enemy, v) === 2) { taken += AD.ANTE; continue; } // 표정 보고 접기
-    if (AD.enemyFolds(enemy, v, mult)) { ehp -= AD.foldDamage(mult); continue; }
-    const board = [...flop, ...rest];
-    const out = AD.resolveShowdown({ pres: AD.best([...hole, ...board]), eres: AD.best([...ehole, ...board]), hole, mult, charms: [], enemy });
+    let pot = 1, folded = 0;
+    for (let street = 3; street <= 5 && !folded; street++) {
+      const board = full.slice(0, street);
+      const me = AD.best([...hole, ...board]);
+      const v = AD.strength(ehole, board);
+      if (street === 3 && me.cat === 0 && AD.tellOf(enemy, v) === 2) { folded = -1; break; } // 텔 보고 폴드
+      const allin = me.cat >= 3;
+      const bet = allin || me.cat === 2 || (me.cat === 1 && me.tb[0] >= 10);
+      if (!bet) continue;
+      pot += allin ? AD.ALLIN_ADD : 1;
+      if (AD.enemyFolds(enemy, v, allin)) folded = 1;
+      else if (allin) break;
+    }
+    if (folded < 0) { taken += AD.foldDamage(pot); continue; }
+    if (folded > 0) { ehp -= AD.foldDamage(pot); continue; }
+    const out = AD.resolveShowdown({ pres: AD.best([...hole, ...full]), eres: AD.best([...ehole, ...full]), hole, pot, charms: [], enemy });
     ehp = Math.min(enemy.hp, ehp - out.toEnemy + out.enemyHeal);
     taken += out.toPlayer;
   }
