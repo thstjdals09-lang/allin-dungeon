@@ -315,6 +315,11 @@
       });
       return at + 420;
     },
+    // 상대 벳·레이즈: 상대 메달에서 팟으로 칩이 날아간다
+    ebet(ev, at, opt) {
+      const medal = $('.enemy .medal');
+      return HANDLERS.chip(ev, at, { ...opt, from: medal ? medal.getBoundingClientRect() : null });
+    },
     cutin(ev, at) { later(at, () => cutin(ev.text, 'gold')); return at + 760; },
     show(ev, at) {
       let t = flipIn($$('.ehole .card.deal'), at) + 80;

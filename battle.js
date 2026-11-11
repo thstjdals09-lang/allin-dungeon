@@ -67,6 +67,7 @@ window.BATTLE = function (C) {
     b.street = 0;
     b.changes = CHANGES + (has('coin') ? 1 : 0);
     b.result = null;
+    b.facing = null;
     b.phase = 'pick';
     ui.swap = false;
     readEnemy(b);
@@ -75,6 +76,7 @@ window.BATTLE = function (C) {
 
   function endHand(b, result, msg) {
     b.result = result;
+    b.facing = null;
     b.phase = 'end';
     ui.swap = false;
     log(msg);
@@ -83,25 +85,39 @@ window.BATTLE = function (C) {
   function nextStreet(b) {
     if (b.street === 2) return showdown(b);
     b.street++;
+    b.facing = null;
     b.board = [...b.board, b.table[0]];
     b.table = b.table.slice(1);
     ui.swap = false;
     readEnemy(b);
   }
 
-  function raise(b, add, allin) {
+  // 상대가 올린 상태: 폴드하면 올리기 전 팟 기준으로 잃는다
+  function enemyRaised(b, kind, before, text) {
+    b.pot++;
+    b.facing = { kind, before };
+    fx({ t: 'ebet' });
+    log(text);
+  }
+
+  // 내 벳·레이즈·올인. 한 거리에 레이즈는 한 번뿐이라 상대는 내 벳에만 레이즈할 수 있다.
+  function raise(b, add, allin, word = '벳', canReraise = true) {
+    const before = b.pot;
     b.pot += add;
     fx({ t: 'chip', allin });
-    if (AD.enemyFolds(b.enemy, b.str, allin, has('face') ? 1.25 : 1, rnd)) {
+    const where = `${STREETS[b.street]}${b.facing ? ` 상대 ${b.facing.kind === 'bet' ? '벳' : '레이즈'} →` : ''} ${allin ? '올인' : word}`;
+    const act = AD.enemyAct(b.enemy, b.str, allin ? 'allin' : canReraise ? 'bet' : 'raise', rnd, has('face') ? 1.25 : 1);
+    if (act === 'fold') {
       const d = AD.foldDamage(b.pot);
       payGold(b);
       b.enemy.hp -= d;
       b.shown = b.shown.map(() => true);
       fx({ t: 'efold', d, kill: b.enemy.hp <= 0 });
-      endHand(b, { type: 'efold', toEnemy: d }, `${STREETS[b.street]} ${allin ? '올인' : '벳'} → 상대 폴드 · 상대 스택 −${d}`);
+      endHand(b, { type: 'efold', toEnemy: d }, `${where} → 상대 폴드 · 상대 스택 −${d}`);
       return;
     }
-    log(`${STREETS[b.street]} ${allin ? '올인' : '벳'} → 상대 콜 · 팟 ×${b.pot}`);
+    if (act === 'raise') return enemyRaised(b, 'raise', b.pot, `${where} → 상대 레이즈 · 팟 ×${b.pot + 1}`);
+    log(`${where} → 상대 콜 · 팟 ×${b.pot}`);
     if (!allin) return nextStreet(b);
     fx({ t: 'cutin', text: '올인 콜' });
     const need = 5 - b.board.length; // 올인이면 남은 카드를 다 깔고 바로 쇼다운
@@ -195,11 +211,21 @@ window.BATTLE = function (C) {
         + btn('핸드 확정', 'lock', undefined, 'primary', b.sel.length !== 2);
     }
     if (b.phase === 'bet') {
-      const foldCost = has('shoes') ? 0 : AD.foldDamage(b.pot);
+      const f = b.facing;
+      const foldCost = has('shoes') ? 0 : AD.foldDamage(f ? f.before : b.pot);
       const allinAdd = AD.ALLIN_ADD + (has('ring') ? 1 : 0);
+      const foldChip = `<button class="chip fold" data-act="fold" aria-label="폴드 스택 −${foldCost}"><b>폴드</b><span>스택 −${foldCost}</span></button>`;
+      const callChip = `<button class="chip c1" data-act="call" aria-label="콜 팟 ×${b.pot}, ${STREETS[b.street] === '리버' ? '쇼다운' : '다음 카드'}"><b>콜</b><span>팟 ×${b.pot}</span></button>`;
+      if (f && f.kind === 'raise') return `<div class="chips">${foldChip}${callChip}</div>`;
+      if (f) {
+        return `<div class="chips">${foldChip}${callChip}
+        <button class="chip c2" data-act="reraise" aria-label="레이즈 팟 ×${b.pot + 1}"><b>레이즈</b><span>팟 ×${b.pot + 1}</span></button>
+        <button class="chip c3" data-act="allin" aria-label="올인 팟 ×${b.pot + allinAdd}, 바로 쇼다운"><b>올인</b><span>팟 ×${b.pot + allinAdd}</span></button>
+      </div>`;
+      }
       // 칩 아래 숫자는 누른 뒤의 팟 — 무엇이 바뀌는지 미리 보이게
       return `<div class="chips">
-        <button class="chip fold" data-act="fold" aria-label="폴드 스택 −${foldCost}"><b>폴드</b><span>스택 −${foldCost}</span></button>
+        ${foldChip}
         <button class="chip c1" data-act="check" aria-label="체크 팟 ×${b.pot}"><b>체크</b><span>팟 ×${b.pot}</span></button>
         <button class="chip c2" data-act="bet" aria-label="벳 팟 ×${b.pot + 1}"><b>벳</b><span>팟 ×${b.pot + 1}</span></button>
         <button class="chip c3" data-act="allin" aria-label="올인 팟 ×${b.pot + allinAdd}, 바로 쇼다운"><b>올인</b><span>팟 ×${b.pot + allinAdd}</span></button>
@@ -256,13 +282,15 @@ window.BATTLE = function (C) {
     let hint = '';
     if (b.phase === 'pick') hint = '핸드 2장을 고르세요. 고른 카드는 체인지로 바꿀 수 있습니다.';
     else if (b.phase === 'bet') {
-      hint = ui.swap ? '바꿀 보드 카드를 누르세요.'
+      hint = b.facing ? (b.facing.kind === 'bet' ? '콜하면 다음 카드, 레이즈하면 되받아칩니다.' : '콜하거나 폴드하세요. 이 거리 레이즈는 끝났습니다.')
+        : ui.swap ? '바꿀 보드 카드를 누르세요.'
         : b.street === 2 ? '리버 베팅. 끝나면 쇼다운입니다.' : `${STREETS[b.street]} 베팅. 체크하면 ${['턴이', '리버가'][b.street]} 열립니다.`;
     }
 
     return `<main class="screen battle">
       ${enemyPanel(b)}
       <section class="board${ui.swap ? ' swapping' : ''}" aria-label="보드">
+        ${b.facing && b.phase === 'bet' ? `<p class="facing" role="status">상대 ${b.facing.kind === 'bet' ? '벳' : '레이즈'} · 팟 ×${b.pot}</p>` : ''}
         <div class="potline">${stepper(b)}<b class="num pot">팟 ×${b.pot}</b></div>
         <div class="cards">${board}</div>
       </section>
@@ -303,12 +331,22 @@ window.BATTLE = function (C) {
       b.phase = 'bet';
       fx({ t: 'lock' });
     },
-    check() { const b = C.S.battle; log(`${STREETS[b.street]} 체크`); fx({ t: 'check' }); nextStreet(b); },
+    check() {
+      const b = C.S.battle;
+      fx({ t: 'check' });
+      if (AD.enemyAct(b.enemy, b.str, 'none', rnd) === 'bet') {
+        return enemyRaised(b, 'bet', b.pot, `${STREETS[b.street]} 체크 → 상대 벳 · 팟 ×${b.pot + 1}`);
+      }
+      log(`${STREETS[b.street]} 체크`);
+      nextStreet(b);
+    },
+    call() { const b = C.S.battle; log(`${STREETS[b.street]} 상대 ${b.facing.kind === 'bet' ? '벳' : '레이즈'} → 콜 · 팟 ×${b.pot}`); fx({ t: 'check' }); nextStreet(b); },
     bet() { raise(C.S.battle, 1, false); },
+    reraise() { raise(C.S.battle, 1, false, '레이즈', false); },
     allin() { raise(C.S.battle, AD.ALLIN_ADD + (has('ring') ? 1 : 0), true); },
     fold() {
       const b = C.S.battle;
-      const d = has('shoes') ? 0 : AD.foldDamage(b.pot);
+      const d = has('shoes') ? 0 : AD.foldDamage(b.facing ? b.facing.before : b.pot);
       hurt(d);
       fx({ t: 'pfold', d, bust: C.S.hp <= 0 });
       endHand(b, { type: 'pfold', toPlayer: d }, `${STREETS[b.street]} 폴드 · 스택 −${d}`);

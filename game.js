@@ -2,8 +2,8 @@
    배경 그림은 scenes.js(SCENES), 연출은 fx.js(FX). */
 (function () {
   'use strict';
-  const VERSION = 3; // v3: 층 지도가 갈림길(map·path)로 바뀌어 v2 저장과 형식이 다르다
-  const SAVE_KEY = 'allin-dungeon-v3';
+  const VERSION = 4; // v4: 상대 벳·레이즈(battle.facing)가 생겨 v3 전투 저장과 다르다. v3: 층 지도가 갈림길(map·path)로 바뀌어 v2 저장과 형식이 다르다
+  const SAVE_KEY = 'allin-dungeon-v4';
   const PROFILE_KEY = 'allin-dungeon-profile';
   const START_STACK = 80;
   const MIN_DECK = 8;

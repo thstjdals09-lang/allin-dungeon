@@ -51,26 +51,27 @@
   };
 
   // mul: 상대가 이길 때 족보 값 배수 · tight: 벳에 폴드하는 정도(0이면 폴드 안 함)
+  // bluff: 약해도 벳하는 확률(기본 0.1)
   // lie: 텔이 거짓일 확률 · poker: 텔이 없음 · armor: 내가 이길 때 덜 잃는 칩
   const ENEMIES = [
     { id: 'drunk', floor: 1, kind: 'normal', name: '취한 단골', glyph: '취', hp: 22, mul: 1, tight: 1, lie: 0.1, desc: '텔이 그대로 드러난다.' },
-    { id: 'bluffer', floor: 1, kind: 'normal', name: '허세꾼', glyph: '허', hp: 24, mul: 1, tight: 0.7, lie: 0.5, desc: '텔 절반이 연기다.' },
+    { id: 'bluffer', floor: 1, kind: 'normal', name: '허세꾼', glyph: '허', hp: 24, mul: 1, tight: 0.7, lie: 0.5, bluff: 0.35, desc: '텔 절반이 연기다.' },
     { id: 'coward', floor: 1, kind: 'normal', name: '겁 많은 회사원', glyph: '겁', hp: 20, mul: 1, tight: 1.5, lie: 0, desc: '벳이 들어오면 쉽게 폴드한다.' },
     { id: 'local', floor: 1, kind: 'normal', name: '동네 타짜', glyph: '타', hp: 26, mul: 1.2, tight: 0.9, lie: 0.25, desc: '이길 때 크게 가져간다.' },
     { id: 'drifter', floor: 1, kind: 'elite', name: '떠돌이 딜러', glyph: '떠', hp: 44, mul: 1.3, tight: 0.8, lie: 0.3, armor: 1, desc: '테이블을 옮겨 다니며 팟을 쓸어 간다.' },
-    { id: 'bear', floor: 1, kind: 'boss', name: '문지기 곰', glyph: '곰', hp: 70, mul: 1.3, tight: 0.6, lie: 0.2, armor: 2, desc: '1층 계단을 지키는 덩치.' },
+    { id: 'bear', floor: 1, kind: 'boss', name: '문지기 곰', glyph: '곰', hp: 70, mul: 1.3, tight: 0.6, lie: 0.2, armor: 2, bluff: 0.15, desc: '1층 계단을 지키는 덩치.' },
 
     { id: 'loanshark', floor: 2, kind: 'normal', name: '사채업자', glyph: '채', hp: 34, mul: 1.2, tight: 0.9, lie: 0.2, heal: 4, desc: '이길 때마다 스택을 채운다.' },
     { id: 'twins', floor: 2, kind: 'normal', name: '쌍둥이 딜러', glyph: '쌍', hp: 28, mul: 0.9, tight: 1, lie: 0.2, hole: 3, desc: '카드 3장을 받아 그중에서 핸드를 고른다.' },
     { id: 'iron', floor: 2, kind: 'normal', name: '무쇠손', glyph: '쇠', hp: 34, mul: 1.2, tight: 0.8, lie: 0.2, armor: 2, desc: '져도 칩을 덜 잃는다.' },
-    { id: 'magician', floor: 2, kind: 'elite', name: '카드 마술사', glyph: '마', hp: 48, mul: 1, tight: 0.8, lie: 0.6, hole: 3, desc: '텔도 카드도 믿을 수 없다.' },
-    { id: 'croupier', floor: 2, kind: 'boss', name: '수석 크루피어', glyph: '딜', hp: 80, mul: 1.1, tight: 0.5, lie: 0.3, hole: 3, armor: 1, desc: '2층의 모든 테이블을 돌리는 사람.' },
+    { id: 'magician', floor: 2, kind: 'elite', name: '카드 마술사', glyph: '마', hp: 48, mul: 1, tight: 0.8, lie: 0.6, hole: 3, bluff: 0.3, desc: '텔도 카드도 믿을 수 없다.' },
+    { id: 'croupier', floor: 2, kind: 'boss', name: '수석 크루피어', glyph: '딜', hp: 80, mul: 1.1, tight: 0.5, lie: 0.3, hole: 3, armor: 1, bluff: 0.15, desc: '2층의 모든 테이블을 돌리는 사람.' },
 
-    { id: 'gambler', floor: 3, kind: 'normal', name: '빚더미 노름꾼', glyph: '빚', hp: 42, mul: 1.4, tight: 0.5, lie: 0.3, desc: '잃을 게 없어서 폴드를 잘 안 한다.' },
+    { id: 'gambler', floor: 3, kind: 'normal', name: '빚더미 노름꾼', glyph: '빚', hp: 42, mul: 1.4, tight: 0.5, lie: 0.3, bluff: 0.25, desc: '잃을 게 없어서 폴드를 잘 안 한다.' },
     { id: 'ghost', floor: 3, kind: 'normal', name: '유령 손님', glyph: '령', hp: 40, mul: 1.4, tight: 0.9, poker: true, desc: '얼굴이 없어 텔도 없다.' },
     { id: 'banker', floor: 3, kind: 'normal', name: '금고지기', glyph: '금', hp: 44, mul: 1.3, tight: 0.9, lie: 0.2, armor: 3, desc: '져도 칩을 많이 덜 잃는다.' },
     { id: 'shark', floor: 3, kind: 'elite', name: '큰손', glyph: '큰', hp: 58, mul: 1.2, tight: 0.6, lie: 0.3, hole: 3, armor: 1, desc: '큰 팟을 좋아한다.' },
-    { id: 'house', floor: 3, kind: 'boss', name: '하우스의 주인', glyph: '주', hp: 110, mul: 1.3, tight: 0, poker: true, hole: 3, armor: 2, desc: '폴드하지 않는다. 텔도 없다.' },
+    { id: 'house', floor: 3, kind: 'boss', name: '하우스의 주인', glyph: '주', hp: 110, mul: 1.3, tight: 0, poker: true, hole: 3, armor: 2, bluff: 0.15, desc: '폴드하지 않는다. 텔도 없다.' },
   ];
 
   const NODES = {
@@ -201,6 +202,15 @@
     return v + (rng() - 0.5) * 0.2 < need;
   }
 
+  // 상대의 행동. facing 'none'(내가 체크) → bet|check, 'bet' → fold|raise|call, 'allin' → fold|call (올인엔 레이즈 없음)
+  function enemyAct(enemy, v, facing, rng = Math.random, foldBoost = 1) {
+    const bluff = enemy.bluff === undefined ? 0.1 : enemy.bluff;
+    if (facing === 'none') return v >= 0.62 || rng() < bluff ? 'bet' : 'check';
+    if (enemyFolds(enemy, v, facing === 'allin', foldBoost, rng)) return 'fold';
+    if (facing === 'bet' && ((v >= 0.85 && rng() < 0.5) || rng() < bluff * 0.3)) return 'raise';
+    return 'call';
+  }
+
   const foldDamage = (pot) => ANTE * pot;
 
   // 쇼다운: 진 쪽이 (족보 값 + 보너스) × 팟 만큼 칩을 잃는다. 방어는 마지막에 뺀다.
@@ -229,7 +239,7 @@
 
   function pickEnemy(floor, kind, rng = Math.random) {
     const e = pick(ENEMIES.filter((x) => x.floor === floor && x.kind === kind), rng);
-    return { hole: 2, armor: 0, heal: 0, lie: 0, ...e };
+    return { hole: 2, armor: 0, heal: 0, lie: 0, bluff: 0.1, ...e };
   }
 
   // 보상·상점 카드: 6~A, 층이 깊을수록 강화 확률이 오른다
@@ -291,7 +301,7 @@
 
   const api = {
     SUITS, rankLabel, HANDS, ROYAL_BONUS, ANTE, ALLIN_ADD, ENCHANTS, ENCHANT_IDS, CHARMS, ENEMIES, NODES, STEPS, FLOORS, TELLS,
-    shuffle, pick, starterDeck, tableDeck, eval5, best, isRoyal, describe, strength, tellOf, enemyFolds,
+    shuffle, pick, starterDeck, tableDeck, eval5, best, isRoyal, describe, strength, tellOf, enemyFolds, enemyAct,
     foldDamage, resolveShowdown, pickEnemy, randomCard, randomCharms, genFloorMap, choicesAt, migrateSave,
   };
   if (typeof module !== 'undefined' && module.exports) module.exports = api;

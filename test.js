@@ -96,6 +96,22 @@ assert.deepStrictEqual(AD.migrateSave(oldSave).reward, { gold: 9, cards: [], cha
 const newSave = { reward: { gold: 9, cards: [1], charms: [], cardPick: 0, charmPick: null } };
 assert.strictEqual(AD.migrateSave(newSave), newSave);
 
+// 상대의 행동: 고정 rng 로 bet/check/fold/raise/call 각각
+const seq = (...xs) => () => xs.shift();
+const foe = { tight: 1, bluff: 0.1 };
+assert.strictEqual(AD.enemyAct(foe, 0.7, 'none', seq()), 'bet'); // 강하면 벳(rng 안 씀)
+assert.strictEqual(AD.enemyAct(foe, 0.3, 'none', seq(0.05)), 'bet'); // 블러프 벳
+assert.strictEqual(AD.enemyAct(foe, 0.3, 'none', seq(0.5)), 'check');
+assert.strictEqual(AD.enemyAct(foe, 0.1, 'bet', seq(0.5)), 'fold');
+assert.strictEqual(AD.enemyAct(foe, 0.9, 'bet', seq(0.5, 0.3)), 'raise'); // 아주 강하면 절반은 레이즈
+assert.strictEqual(AD.enemyAct(foe, 0.9, 'bet', seq(0.5, 0.7)), 'call');
+assert.strictEqual(AD.enemyAct(foe, 0.6, 'bet', seq(0.5, 0.01)), 'raise'); // 블러프 레이즈
+assert.strictEqual(AD.enemyAct(foe, 0.6, 'bet', seq(0.5, 0.9)), 'call');
+assert.strictEqual(AD.enemyAct(foe, 0.9, 'allin', seq(0.5, 0.01)), 'call'); // 올인·레이즈에는 레이즈 없음
+assert.strictEqual(AD.enemyAct(foe, 0.9, 'raise', seq(0.5, 0.01)), 'call');
+assert.strictEqual(AD.enemyAct(foe, 0.1, 'allin', seq(0.5)), 'fold');
+assert.strictEqual(AD.pickEnemy(1, 'normal').bluff >= 0.1, true);
+
 console.log('logic 테스트 통과');
 
 if (process.argv.includes('--sim')) sim();
@@ -112,7 +128,7 @@ function sim() {
   };
   const rows = [];
   for (const e of AD.ENEMIES) {
-    const enemy = { hole: 2, armor: 0, heal: 0, ...e };
+    const enemy = { hole: 2, armor: 0, heal: 0, bluff: 0.1, ...e };
     let taken = [], hands = 0;
     for (let k = 0; k < N; k++) {
       const res = fight(enemy, deckFor(e.floor));
@@ -141,17 +157,25 @@ function fight(enemy, deck) {
     }
     hands++;
     let pot = 1, folded = 0;
+    // 내 패가 원페어 이상이면 콜, 아니면 텔이 '여유'면 폴드, 그 밖엔 콜. 폴드하면 상대가 올리기 전 팟만큼 잃는다
+    const respond = (me, v, before) => {
+      if (me.cat === 0 && AD.tellOf(enemy, v) === 2) { folded = -1; pot = before; }
+    };
     for (let street = 3; street <= 5 && !folded; street++) {
       const board = full.slice(0, street);
       const me = AD.best([...hole, ...board]);
       const v = AD.strength(ehole, board);
-      if (street === 3 && me.cat === 0 && AD.tellOf(enemy, v) === 2) { folded = -1; break; } // 텔 보고 폴드
       const allin = me.cat >= 3;
       const bet = allin || me.cat === 2 || (me.cat === 1 && me.tb[0] >= 10);
-      if (!bet) continue;
+      if (!bet) {
+        if (AD.enemyAct(enemy, v, 'none') === 'bet') { pot++; respond(me, v, pot - 1); }
+        continue;
+      }
       pot += allin ? AD.ALLIN_ADD : 1;
-      if (AD.enemyFolds(enemy, v, allin)) folded = 1;
+      const act = AD.enemyAct(enemy, v, allin ? 'allin' : 'bet');
+      if (act === 'fold') folded = 1;
       else if (allin) break;
+      else if (act === 'raise') { pot++; respond(me, v, pot - 1); }
     }
     if (folded < 0) { taken += AD.foldDamage(pot); continue; }
     if (folded > 0) { ehp -= AD.foldDamage(pot); continue; }
